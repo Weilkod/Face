@@ -120,41 +120,35 @@ async def get_matchup_detail(
     if home_pitcher is None or away_pitcher is None:
         raise HTTPException(status_code=404, detail="Pitcher record missing for this matchup")
 
-    # Load face scores
-    home_face = (
-        await session.execute(
-            select(FaceScore).where(
-                FaceScore.pitcher_id == matchup.home_pitcher_id,
-                FaceScore.season == season,
+    # Batch-load face scores for both pitchers in a single query
+    face_rows: dict[int, FaceScore] = {
+        r.pitcher_id: r
+        for r in (
+            await session.execute(
+                select(FaceScore).where(
+                    FaceScore.pitcher_id.in_(pitcher_ids),
+                    FaceScore.season == season,
+                )
             )
-        )
-    ).scalar_one_or_none()
-    away_face = (
-        await session.execute(
-            select(FaceScore).where(
-                FaceScore.pitcher_id == matchup.away_pitcher_id,
-                FaceScore.season == season,
-            )
-        )
-    ).scalar_one_or_none()
+        ).scalars().all()
+    }
+    home_face = face_rows.get(matchup.home_pitcher_id)
+    away_face = face_rows.get(matchup.away_pitcher_id)
 
-    # Load fortune scores
-    home_fortune = (
-        await session.execute(
-            select(FortuneScore).where(
-                FortuneScore.pitcher_id == matchup.home_pitcher_id,
-                FortuneScore.game_date == matchup.game_date,
+    # Batch-load fortune scores for both pitchers in a single query
+    fortune_rows: dict[int, FortuneScore] = {
+        r.pitcher_id: r
+        for r in (
+            await session.execute(
+                select(FortuneScore).where(
+                    FortuneScore.pitcher_id.in_(pitcher_ids),
+                    FortuneScore.game_date == matchup.game_date,
+                )
             )
-        )
-    ).scalar_one_or_none()
-    away_fortune = (
-        await session.execute(
-            select(FortuneScore).where(
-                FortuneScore.pitcher_id == matchup.away_pitcher_id,
-                FortuneScore.game_date == matchup.game_date,
-            )
-        )
-    ).scalar_one_or_none()
+        ).scalars().all()
+    }
+    home_fortune = fortune_rows.get(matchup.home_pitcher_id)
+    away_fortune = fortune_rows.get(matchup.away_pitcher_id)
 
     home_scores = _build_pitcher_scores(home_face, home_fortune)
     away_scores = _build_pitcher_scores(away_face, away_fortune)

@@ -84,7 +84,9 @@ class MatchupSummary(BaseModel):
     away_total: int
     predicted_winner: Optional[str] = None
     winner_comment: Optional[str] = None
-    chemistry_score: float
+    chemistry_score: float = Field(..., ge=0.0, le=4.0)
+    game_time: Optional[str] = None
+    series_label: Optional[str] = None
 
 
 class TodayResponse(BaseModel):

@@ -29,7 +29,7 @@ Defined in `.claude/agents/`. Match the task, delegate rather than re-derive:
 | React pages, components, Recharts, share-card image export | `react-ui-dev` |
 | FastAPI routers, SQLAlchemy models, APScheduler wiring, Pydantic schemas | `fastapi-backend-dev` |
 | Claude Vision/Text calls, prompt design, JSON parsing, caching layer, fallback | `claude-ai-integrator` |
-| KBO 일정 / 선발투수 / 프로필 사진 crawling (KBO, 네이버, 스탯티즈) and name → `pitcher_id` matching | `kbo-data-crawler` |
+| KBO 일정 / 선발투수 / 프로필 사진 crawling (koreabaseball.com 단일 소스) and name → `pitcher_id` matching | `kbo-data-crawler` |
 | 사주·오행·12지신·별자리 원소 logic, 상성 rules, score calibration vs README §2–3 | `fortune-domain-expert` |
 
 Run them in parallel when the work is independent (e.g. crawler + fortune generation).
@@ -57,10 +57,12 @@ Run them in parallel when the work is independent (e.g. crawler + fortune genera
 
 ## 5. Crawling rules
 
-- Primary → fallback chain: **KBO 공식 → 네이버 스포츠 → 스탯티즈.** Never rely on a single source.
+- **Single source: koreabaseball.com.** Do NOT build fallback paths to Naver Sports, Statiz, Daum, or any other host. User directive (2026-04-13): solve hard problems inside the official site instead of routing around them. The only approved out-of-band fallback is **Playwright headless** — and only if httpx-based access to koreabaseball.com truly fails.
+- **Preferred endpoint: `POST /ws/Main.asmx/GetKboGameList`** (form body `date=YYYYMMDD&leId=1&srId=0,9,6`). Single call returns game list + starter playerId + starter Korean name + team + stadium + time + cancel flag. Use this instead of the older 2-step `GetTodayGames` + GameCenter HTML scrape chain.
+- **robots.txt /ws/ carve-out.** `/ws/` is blanket-disallowed in koreabaseball.com's robots.txt, but every 1군 schedule surface on the site is a SPA that sources data from `/ws/` — the public site literally cannot function without it. We interpret robots.txt loosely for this specific prefix: `_robots_allows()` returns True for `www.koreabaseball.com/ws/*`. Keep the carve-out narrow (only `/ws/`, only koreabaseball.com) and keep rate limits strict. This decision is logged in `PROGRESS.md` §A-2 session 3.
 - 선발투수 미발표 → retry at 09:00 and 10:00 before giving up.
 - Crawled 선수 이름 must map to `pitcher_id` via exact match first, then fuzzy (rapidfuzz ≥ 85). Unknown names go to a review queue, not silently dropped.
-- Respect robots.txt, add a UA header, rate-limit to ≤ 1 req/sec per host.
+- Always add a UA header (`FACEMETRICS/0.1 (+research)` or similar) plus `Referer: https://www.koreabaseball.com/Schedule/GameCenter/Main.aspx` and `X-Requested-With: XMLHttpRequest` for `/ws/` POST calls. Rate-limit to ≤ 1 req/sec per host.
 
 ## 6. Legal / ethical guardrails (non-negotiable)
 

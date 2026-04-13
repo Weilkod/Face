@@ -32,11 +32,21 @@ function param(req: NextRequest, key: string, fallback: string = ""): string {
   return req.nextUrl.searchParams.get(key) ?? fallback;
 }
 
-function paramInt(req: NextRequest, key: string, fallback: number): number {
+// Clamp to [min, max] so a crafted URL like `?homeTotal=99999999` can't spray
+// a 7-digit number across the share card. Totals are 0..100 per README §2.
+function paramInt(
+  req: NextRequest,
+  key: string,
+  fallback: number,
+  { min, max }: { min: number; max: number },
+): number {
   const raw = req.nextUrl.searchParams.get(key);
   if (raw == null) return fallback;
   const n = Number.parseInt(raw, 10);
-  return Number.isFinite(n) ? n : fallback;
+  if (!Number.isFinite(n)) return fallback;
+  if (n < min) return min;
+  if (n > max) return max;
+  return n;
 }
 
 export async function GET(
@@ -51,8 +61,8 @@ export async function GET(
   const awayName = param(req, "away", "투수 B");
   const homeTeam = param(req, "homeTeam", "");
   const awayTeam = param(req, "awayTeam", "");
-  const homeTotal = paramInt(req, "homeTotal", 0);
-  const awayTotal = paramInt(req, "awayTotal", 0);
+  const homeTotal = paramInt(req, "homeTotal", 0, { min: 0, max: 100 });
+  const awayTotal = paramInt(req, "awayTotal", 0, { min: 0, max: 100 });
   const winner = param(req, "winner", "");
   const stadium = param(req, "stadium", "");
   const gameTime = param(req, "time", "");

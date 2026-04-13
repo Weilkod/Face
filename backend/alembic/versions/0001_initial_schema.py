@@ -44,6 +44,7 @@ def upgrade() -> None:
             "updated_at",
             sa.DateTime(),
             server_default=sa.func.now(),
+            onupdate=sa.func.now(),
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("pitcher_id"),

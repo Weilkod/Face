@@ -44,6 +44,20 @@ def create_app() -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "ok", "env": settings.app_env}
 
+    # Client-facing routers
+    from app.routers import accuracy, history, matchup, pitcher, today
+
+    app.include_router(today.router, prefix="/api")
+    app.include_router(matchup.router, prefix="/api")
+    app.include_router(pitcher.router, prefix="/api")
+    app.include_router(history.router, prefix="/api")
+    app.include_router(accuracy.router, prefix="/api")
+
+    # Admin routers
+    from app.routers import admin
+
+    app.include_router(admin.router, prefix="/admin")
+
     return app
 
 

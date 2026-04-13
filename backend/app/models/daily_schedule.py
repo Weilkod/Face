@@ -18,6 +18,9 @@ class DailySchedule(Base):
     game_time: Mapped[Optional[time]] = mapped_column(Time, nullable=True)
     home_starter: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     away_starter: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # KBO 내부 playerId — A-5: ID-우선 매칭을 위해 크롤러가 함께 저장한다.
+    home_starter_kbo_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    away_starter_kbo_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     source_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     crawled_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()

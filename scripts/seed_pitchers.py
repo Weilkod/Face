@@ -6,6 +6,15 @@ preferred, namuwiki as fallback).
 
 Idempotent — existing rows (matched by (name, team)) are updated in place.
 
+A-5 / A-6 extension: if a JSON entry carries a `kbo_player_id` integer field,
+it is written to `pitchers.kbo_player_id`.  This enables the ID-primary
+matching path in `match_pitcher_by_kbo_id` (crawler.py).
+
+Future --harvest flag (§A-6 TODO): probe
+  POST /ws/Player.asmx/GetPlayerInfoList
+per team to auto-discover kbo_player_id for every roster member.  The ASMX
+endpoint has not yet been verified; implement once confirmed via DevTools.
+
 Usage (from repo root):
     python scripts/seed_pitchers.py
 """
@@ -120,6 +129,8 @@ async def main() -> int:
                 )
             ).scalar_one_or_none()
 
+            kbo_player_id: int | None = row.get("kbo_player_id")
+
             if existing is None:
                 session.add(
                     Pitcher(
@@ -132,6 +143,7 @@ async def main() -> int:
                         zodiac_element=sign["element"],
                         blood_type=row.get("blood_type"),
                         profile_photo=photo,
+                        kbo_player_id=kbo_player_id,
                     )
                 )
                 inserted += 1
@@ -144,6 +156,10 @@ async def main() -> int:
                 existing.blood_type = row.get("blood_type")
                 if photo:
                     existing.profile_photo = photo
+                # A-5: set kbo_player_id only when the JSON provides one.
+                # Never blank out an existing ID with None from an older JSON entry.
+                if kbo_player_id is not None:
+                    existing.kbo_player_id = kbo_player_id
                 updated += 1
         await session.commit()
 

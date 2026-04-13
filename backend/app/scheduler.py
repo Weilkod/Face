@@ -40,6 +40,7 @@ from app.models.matchup import Matchup
 from app.models.pitcher import Pitcher
 from app.services.crawler import (
     fetch_today_schedule,
+    match_pitcher_by_kbo_id,
     match_pitcher_name,
     upsert_schedule,
 )
@@ -198,6 +199,8 @@ async def analyze_and_score_matchups(game_date: Optional[date] = None) -> dict[s
             DailySchedule.stadium,
             DailySchedule.home_starter,
             DailySchedule.away_starter,
+            DailySchedule.home_starter_kbo_id,
+            DailySchedule.away_starter_kbo_id,
         ).where(DailySchedule.game_date == gd)
         schedule_rows = (await session.execute(stmt)).all()
 
@@ -207,6 +210,8 @@ async def analyze_and_score_matchups(game_date: Optional[date] = None) -> dict[s
             stadium = row.stadium
             home_starter = row.home_starter
             away_starter = row.away_starter
+            home_kbo_id = row.home_starter_kbo_id
+            away_kbo_id = row.away_starter_kbo_id
 
             if not home_starter or not away_starter:
                 logger.info(
@@ -216,8 +221,19 @@ async def analyze_and_score_matchups(game_date: Optional[date] = None) -> dict[s
                 counts["skipped"] += 1
                 continue
 
-            home_pid = await match_pitcher_name(session, home_starter, home_team, gd)
-            away_pid = await match_pitcher_name(session, away_starter, away_team, gd)
+            # A-5: prefer exact KBO player ID match; fall back to name match.
+            home_pid: Optional[int] = None
+            if home_kbo_id:
+                home_pid = await match_pitcher_by_kbo_id(session, home_kbo_id, home_team, gd)
+            if home_pid is None:
+                home_pid = await match_pitcher_name(session, home_starter, home_team, gd)
+
+            away_pid: Optional[int] = None
+            if away_kbo_id:
+                away_pid = await match_pitcher_by_kbo_id(session, away_kbo_id, away_team, gd)
+            if away_pid is None:
+                away_pid = await match_pitcher_name(session, away_starter, away_team, gd)
+
             if home_pid is None or away_pid is None:
                 logger.warning(
                     "[scheduler:score] skip %s@%s — unresolved pitcher (home=%s, away=%s)",
@@ -290,7 +306,7 @@ async def publish_matchups(game_date: Optional[date] = None) -> int:
     """11:00 KST: flip is_published=True on today's matchups rows."""
     gd = game_date or _today_kst()
     async with SessionLocal() as session:
-        stmt = select(Matchup).where(Matchup.game_date == gd)
+        stmt = select(Matchup).where(Matchup.game_date == gd, Matchup.is_published.is_(False))
         rows = list((await session.execute(stmt)).scalars().all())
         for r in rows:
             r.is_published = True

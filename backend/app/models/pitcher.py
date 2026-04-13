@@ -20,6 +20,11 @@ class Pitcher(Base):
     zodiac_element: Mapped[str] = mapped_column(String(8), nullable=False)
     blood_type: Mapped[Optional[str]] = mapped_column(String(4), nullable=True)
     profile_photo: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    # KBO 내부 playerId (GetKboGameList T_PIT_P_ID / B_PIT_P_ID).
+    # A-5: ID-우선 매칭에 사용. 동명이인 disambiguate 보장.
+    kbo_player_id: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, unique=True, index=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()

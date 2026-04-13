@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.routers import accuracy, admin, history, matchup, pitcher, today
 from app.scheduler import build_scheduler
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,16 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["meta"])
     async def health() -> dict[str, str]:
         return {"status": "ok", "env": settings.app_env}
+
+    # Public API routers (all prefixed with /api)
+    app.include_router(today.router, prefix="/api")
+    app.include_router(matchup.router, prefix="/api")
+    app.include_router(pitcher.router, prefix="/api")
+    app.include_router(history.router, prefix="/api")
+    app.include_router(accuracy.router, prefix="/api")
+
+    # Admin router (prefix is /admin, already set inside admin.py)
+    app.include_router(admin.router)
 
     return app
 

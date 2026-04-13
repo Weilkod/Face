@@ -155,7 +155,12 @@ def _normalize_name(name: str) -> str:
 
 
 def _append_review(entry: dict) -> None:
-    """Append an unmatched-pitcher entry to the JSON review queue file."""
+    """Append an unmatched-pitcher entry to the JSON review queue file.
+
+    Dedup: an entry whose (date, team, side, crawled_name, kbo_player_id)
+    tuple already exists in the queue is silently dropped — prevents the
+    09:00 / 10:00 retry jobs from inflating the queue with duplicates.
+    """
     queue: list[dict] = []
     if REVIEW_QUEUE_PATH.exists():
         try:
@@ -163,6 +168,27 @@ def _append_review(entry: dict) -> None:
                 queue = json.load(fh)
         except Exception:
             queue = []
+
+    # Dedup key: identity fields that define "same miss".
+    entry_key = (
+        entry.get("date"),
+        entry.get("team"),
+        entry.get("side"),
+        entry.get("crawled_name"),
+        entry.get("kbo_player_id"),
+    )
+    for existing_entry in queue:
+        ex_key = (
+            existing_entry.get("date"),
+            existing_entry.get("team"),
+            existing_entry.get("side"),
+            existing_entry.get("crawled_name"),
+            existing_entry.get("kbo_player_id"),
+        )
+        if entry_key == ex_key:
+            logger.debug("[crawler] review dedup skip: %s", entry_key)
+            return
+
     queue.append(entry)
     REVIEW_QUEUE_PATH.parent.mkdir(parents=True, exist_ok=True)
     with REVIEW_QUEUE_PATH.open("w", encoding="utf-8") as fh:
@@ -383,8 +409,44 @@ def _clean_starter_name(raw) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
-# pitcher_id matcher (legacy name-based fallback — kept until A-5/A-6 land)
+# pitcher_id matchers
 # ---------------------------------------------------------------------------
+
+
+async def match_pitcher_by_kbo_id(
+    session: AsyncSession,
+    kbo_player_id: int,
+    team: str,
+    game_date: Optional[date] = None,
+) -> Optional[int]:
+    """
+    Resolve a KBO playerId (from GetKboGameList T_PIT_P_ID / B_PIT_P_ID) to a
+    local pitcher_id via the `pitchers.kbo_player_id` column (A-5 column).
+
+    This is the preferred path — exact by definition, immune to homonyms.
+    Returns None when the ID is not yet seeded into the `pitchers` table;
+    the caller should then fall back to `match_pitcher_name`.
+
+    Unknown IDs are appended to the review queue (not silently dropped).
+    """
+    stmt = select(Pitcher).where(Pitcher.kbo_player_id == kbo_player_id)
+    pitcher = (await session.execute(stmt)).scalar_one_or_none()
+    if pitcher is not None:
+        logger.debug(
+            "[crawler] kbo_id %d → pitcher_id=%d (%s)",
+            kbo_player_id, pitcher.pitcher_id, pitcher.name,
+        )
+        return pitcher.pitcher_id
+
+    # ID not in DB yet — queue for human review so it gets seeded.
+    _append_review({
+        "date": game_date.isoformat() if game_date else datetime.now(KST).date().isoformat(),
+        "team": team,
+        "kbo_player_id": kbo_player_id,
+        "reason": "kbo_player_id not found in pitchers table — needs seeding",
+        "queued_at": datetime.now(KST).isoformat(),
+    })
+    return None
 
 
 async def match_pitcher_name(
@@ -525,15 +587,17 @@ async def upsert_schedule(
                     game_time=entry.game_time,
                     home_starter=entry.home_starter_name,
                     away_starter=entry.away_starter_name,
+                    home_starter_kbo_id=entry.home_starter_kbo_id,
+                    away_starter_kbo_id=entry.away_starter_kbo_id,
                     source_url=entry.source_url,
                 )
             )
             counts["inserted"] += 1
             logger.info(
-                "[crawler:upsert] INSERT %s %s@%s home=%s away=%s",
+                "[crawler:upsert] INSERT %s %s@%s home=%s(id=%s) away=%s(id=%s)",
                 entry.game_date, entry.away_team, entry.home_team,
-                entry.home_starter_name or "(TBD)",
-                entry.away_starter_name or "(TBD)",
+                entry.home_starter_name or "(TBD)", entry.home_starter_kbo_id,
+                entry.away_starter_name or "(TBD)", entry.away_starter_kbo_id,
             )
             continue
 
@@ -589,6 +653,15 @@ async def upsert_schedule(
                     "source_url": entry.source_url,
                     "queued_at": datetime.now(KST).isoformat(),
                 })
+
+        # KBO IDs: only fill when the column is currently NULL — never blank out
+        # a confirmed id with None (same null-safety contract as starter names).
+        if entry.home_starter_kbo_id is not None and existing.home_starter_kbo_id is None:
+            existing.home_starter_kbo_id = entry.home_starter_kbo_id
+            changed = True
+        if entry.away_starter_kbo_id is not None and existing.away_starter_kbo_id is None:
+            existing.away_starter_kbo_id = entry.away_starter_kbo_id
+            changed = True
 
         if entry.source_url and existing.source_url != entry.source_url:
             existing.source_url = entry.source_url

@@ -2,8 +2,7 @@
 
 > **자동 아카이브 지침:**  
 > 완료된 Phase 섹션이 **다음 Phase 착수 후** 또는 **2주 이상 경과** 했을 때,  
-> 세부 구현 내역은 `ARCHIVE.md` 로 이동하고 이 파일에는 핵심 결과만 체크리스트로 남긴다.  
-> 세션 요약 로그, 파일 맵 스냅샷, 코드 리뷰 라운드트립 내역도 아카이브 대상.
+> 세부 구현 내역은 `ARCHIVE.md` 로 이동하고 이 파일에는 핵심 결과만 체크리스트로 남긴다.
 
 - **Spec:** `README.md` + `CLAUDE.md`
 - **DB URL (dev):** `sqlite+aiosqlite:///data/facemetrics.db`
@@ -14,153 +13,99 @@
 ## 완료 이력 (상세 → `ARCHIVE.md`)
 
 - [x] **Phase 1** — 기반 구축 ✅ (2026-04-13)  
-  FastAPI 스캐폴딩, 5 테이블 DB, 투수 10명 시드, init/seed 스크립트  
-  ⚠️ Python 3.14 + SQLAlchemy ≥ 2.0.49 필수 (`Mapped[Optional[str]]`, `__future__` 없음)
+  FastAPI 스캐폴딩, 5 테이블 DB, 투수 10명 시드, init/seed 스크립트
 
 - [x] **Phase 2** — AI 엔진 ✅ (2026-04-13)  
   관상(Claude Vision) + 운세(Claude Text) + 상성(룰 기반) + scoring_engine  
-  ⚠️ Claude API 키 없이는 캐시 미스 경로 미검증 상태 — §B 필수
+  ⚠️ Claude API 키 없이는 캐시 미스 경로 미검증 — §B 필수
 
-- [x] **Phase 3 sub-task 1** — 크롤러 read-only ✅ (2026-04-13)  
-  KBO `GetKboGameList` 단일 소스, `/ws/` robots carve-out, 이름 매처
+- [x] **Phase 3** — 크롤러 + 스케줄러 ✅ (2026-04-13)  
+  KBO `GetKboGameList` 단일 소스, `/ws/` robots carve-out, DB write, 5개 KST 잡
 
-- [x] **Phase 3 sub-task 2** — DB write + Scheduler ✅ (2026-04-13)  
-  `upsert_schedule`, 5개 KST 잡(08:00/09:00/10:00/10:30/11:00), FastAPI lifespan wiring  
-  실 데이터 smoke: `date(2026,4,14)` → 5경기 5/5 선발 확정 수신
+- [x] **Phase 4** — API 라우터 ✅ (2026-04-13)  
+  커밋: `72a5803` → 코드리뷰 수정 `1ee88ce` → 백엔드 추가 수정 `e31c3c1`, `f4fba33`  
+  - **클라이언트:** GET `/api/today`, `/api/matchup/{id}`, `/api/pitcher/{id}`, `/api/history`, `/api/accuracy`
+  - **어드민:** POST `/admin/crawl-schedule`, `/admin/analyze-face/{id}`, `/admin/generate-fortune`, `/admin/calculate-matchups`, `/admin/update-result/{id}`
+  - `app/schemas/response.py` — Pydantic v2 응답 스키마 (chemistry_score ge/le, game_time/series_label)
+  - `app/routers/_helpers.py` — 공유 `pitcher_summary()` 헬퍼
+  - `matchup.py` — face/fortune 점수 배치 IN 쿼리 (4 SELECT → 2)
 
-- [x] **Phase 4** — API 라우터 ✅ (2026-04-13, 세션 4)  
-  커밋: `72a5803` + 코드리뷰 수정 `1ee88ce`  
-  - GET `/api/today`, `/api/matchup/{id}`, `/api/pitcher/{id}`, `/api/history`, `/api/accuracy`  
-  - POST `/admin/crawl-schedule`, `/admin/analyze-face/{id}`, `/admin/generate-fortune`, `/admin/calculate-matchups`, `/admin/update-result/{id}`  
-  - `app/schemas/response.py` Pydantic v2 응답 스키마  
-  - `app/routers/_helpers.py` 공유 `pitcher_summary()` 헬퍼  
-  - `python -c "from app.main import app"` import OK 확인
-
-- [x] **Phase 5** — 프론트엔드 초기 구축 ✅ (2026-04-13, 세션 4)  
-  커밋: `1ee88ce`, `e846880`  
-  - Next.js 14 App Router (`frontend/`) — `npm run build` clean  
-  - Pages: `/` (TodayMatchups hero + accordion), `/history`, `/pitcher/[id]`  
-  - Components: `MatchupCard`(아코디언), `RadarChart`(SVG 5축), `ScoreBar`, `AxisDetail`, `Footer`  
-  - Mock data: 3개 매치업 (엔스/곽빈, 김광현/쿠에바스, 네일/페디)  
-  - `src/lib/api.ts` USE_MOCK 플래그, `src/types/index.ts`  
-  - Tailwind 커스텀 색상 draft.html 픽셀 매칭, bar-fill 애니메이션  
-  - 레거시 `shine-border.tsx`, `timeline.tsx` 삭제
+- [x] **Phase 5** — 프론트엔드 ✅ (2026-04-13)  
+  커밋: `1d38c0c` → 수정 `726a3ea`  
+  - **Next.js 14** App Router, TypeScript, Tailwind (draft.html 픽셀 매칭)  
+  - **Pages:** `/` (히어로 + 아코디언 매치업 리스트), `/history` (날짜 선택 + 적중률), `/pitcher/[id]` (투수 프로필)
+  - **Components:** `MatchupCard` (expand 시 lazy detail fetch), `RadarChart` (SVG 5축), `ScoreBar`, `AxisDetail`, `Footer`
+  - **api.ts:** USE_MOCK env var, getHistory `.matchups` 언래핑, `getMatchupDetail` lazy fetch
+  - **Mock data:** 3개 매치업 (엔스/곽빈, 김광현/쿠에바스, 네일/페디)
+  - `npm run build` clean ✅, 레거시 shine-border/timeline 삭제 ✅
 
 ---
 
-## 현재 상태 (세션 4 기준, 2026-04-13)
+## 현재 상태 (세션 4 완료, 2026-04-13)
 
-Phase 4 라우터 + Phase 5 프론트엔드 구조 완성.  
-`npm run build` clean, 4개 라우트 컴파일 확인.  
-**코드 리뷰어가 BLOCK 판정한 미수정 이슈들이 다음 세션의 첫 작업.**
-
----
-
-## [WPI] 세션 5 인계 (2026-04-13)
-
-### 브랜치
-`claude/phase-5-no-api-5jocG`
-
-### 세션 시작 전 커밋 필요 (staged 상태)
-```
-git commit -m "chore: linter type changes, delete legacy UI stubs, gitignore next-env.d.ts"
-git push
-```
-스테이지된 내용:
-- `frontend/src/types/index.ts` — 린터 수정 반영
-- `frontend/components/ui/shine-border.tsx`, `timeline.tsx` — 삭제
-- `frontend/next-env.d.ts` — Next.js 자동생성 (`.gitignore` 추가됨)
-- `.gitignore` — `frontend/next-env.d.ts` 항목 추가
-
-### 코드 리뷰어 BLOCK 이슈 (최우선 수정 대상)
-
-#### 🔴 CRITICAL
-
-**C1 — `frontend/src/lib/api.ts:17`**  
-`USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true" || true` → `|| true` 제거  
-실제 API가 영구 차단됨
-
-**C2 — `frontend/src/app/page.tsx:22`**  
-`getTodayMatchups()` 반환 타입 `MatchupSummary[]`을 `as MatchupDetail[]` 캐스팅  
-→ expand 시 `home_scores`/`away_scores`/`chemistry` 런타임 오류  
-해결 방법: MatchupCard 열 때 `/api/matchup/{id}` 별도 fetch (권장)
-
-**C3 — `frontend/src/app/page.tsx:27`**  
-`formatDateKo("2026-04-13")` 날짜 하드코딩 → `new Date()` 또는 API `date` 필드 사용
-
-**C4 — `frontend/src/types/index.ts:43-44`**  
-`MatchupSummary.game_time`, `series_label` — 백엔드 스키마에 없는 필드  
-→ 백엔드 `MatchupSummary`에 추가하거나 프론트 타입에서 제거 (백엔드 추가 권장)
-
-**C5 — `frontend/src/types/index.ts:114-119`**  
-`PitcherProfile.hand` — 백엔드 없음, `scores: PitcherScores | null` — 백엔드는 `face_scores` + `today_fortune` 분리  
-→ `PitcherProfile` 을 `PitcherDetail`과 정렬하거나 삭제
-
-#### 🟡 WARNING
-
-**I1 — `history/page.tsx:21`** — `yesterday()` 내 `new Date("2026-04-13")` 하드코딩 → `new Date()`
-
-**I2 — `page.tsx:47,54`** — `style={{ color: "#0A192F" }}` 등 인라인 스타일 → Tailwind 커스텀 색상 토큰 사용
-
-**I3 — `response.py:87`** — `MatchupSummary.chemistry_score` Field에 `ge=0.0, le=4.0` 누락
-
-**I4 — `matchup.py:123-157`** — face/fortune 점수 4개 개별 쿼리 → `IN` 배치 로드 미적용
-
-**I5 — `api.ts:71`** — `getHistory()` 가 `HistoryResponse` 객체를 배열로 반환 (`.matchups` 언래핑 누락)
-
-**I6 — `history/page.tsx:83`** — `max="2026-04-12"` 하드코딩 → `new Date().toISOString().split("T")[0]`
-
-#### 🟢 NITS
-- `ScoreBar.tsx:16` `maxScore` prop 미사용 dead parameter
-
-### 다음 세션 작업 순서
-
-1. staged 파일 커밋 + 푸시
-2. `react-ui-dev` 에이전트에 C1~C3, I1~I2, I5~I6 프론트엔드 이슈 수정 위임
-3. `fastapi-backend-dev` 에이전트에 C4(백엔드 game_time/series_label 추가), I3, I4 위임 — **병렬 실행 가능**
-4. `code-reviewer` 게이트 통과 확인
-5. 이후 Phase 5 미구현 항목:
-   - 브라우저 실기동 테스트 (360px 모바일 뷰포트)
-   - PitcherPage 투수 프로필 완성 (face_scores + today_fortune 분리 구조)
-   - 히스토리 페이지 실제 날짜 date picker 동작 확인
-   - Share card (PNG 저장) 기능 — Phase 6 범위
+Phase 1~5 코드 구현 완료. 브랜치 `claude/phase-5-no-api-5jocG`, 워킹 트리 클린.  
+**미완료 항목은 아래 §잔여 작업 참조.**
 
 ---
 
-## 진행 중 TODO
+## 잔여 작업 (우선순위 순)
 
-### A. 크롤러 마무리 (nice-to-have)
+### 🔴 Blocker — 배포 전 필수
 
-- [ ] **A-5.** `pitchers` 에 `kbo_player_id` 컬럼 추가 + `match_pitcher_by_kbo_id()` 헬퍼  
-- [ ] **A-6.** `seed_pitchers.py` 에 KBO 프로필 수확기 추가  
-
-### B. Phase 2 AI 실검증 (blocker — 배포 전 필수)
-
-- [ ] `.env` 에 `ANTHROPIC_API_KEY` → 파이프라인 실행 검증
-- [ ] 고아 score row 문제 — Vision 성공 + Text 실패 시 savepoint
+#### B. Phase 2 AI 실검증
+- [ ] `backend/.env` 에 `ANTHROPIC_API_KEY` 입력 후 파이프라인 수동 실행
+  ```bash
+  python -c "import asyncio; from app.scheduler import analyze_and_score_matchups; asyncio.run(analyze_and_score_matchups())"
+  ```
+  - [ ] Claude Vision 첫 호출 → `face_scores` row 로그 확인
+  - [ ] Claude Text 첫 호출 → `fortune_scores` row 로그 확인
+  - [ ] 동일 `(pitcher_id, date)` 재실행 → DB 캐시 히트, Claude 호출 0회 확인
+- [ ] Vision 성공 + Text 실패 시 고아 row 방지 — savepoint 또는 문서화
 - [ ] `analyze_and_score_matchups` except 분기 — Claude mock + rollback 유닛 테스트
 
-### C. 운영 잔여 (non-blocker)
+#### E. 브라우저 실기동 테스트 (Phase 5 완료 기준)
+- [ ] `npm run dev` + 360px 모바일 뷰포트에서 전체 플로우 확인
+  - 메인 페이지 히어로 → 매치업 카드 렌더링
+  - `FACEMETRICS 상세` 클릭 → 아코디언 확장 + 레이더 차트
+  - `/pitcher/[id]` 투수 프로필 페이지
+  - `/history` 날짜 선택 + 적중률 카드
+- [ ] TypeScript 타입 체크: `npm run type-check`
 
-- [ ] `_append_review` dedup, concurrency
-- [ ] `publish_matchups` — `is_published.is_(False)` 필터 추가
-- [ ] `analyze_and_score_matchups` — pitcher `IN [...]` 배치 로드
-- [ ] Alembic 도입 여부 결정
+### 🟡 Important — 품질/정합
 
-### D. Phase 5 프론트엔드 잔여
+#### D. 프론트엔드 잔여
+- [ ] **D-1** `api.ts:73` `as HistoryMatchup[]` 캐스팅 제거 (no-op, 가독성)
+- [ ] **D-2** `/pitcher/[id]/page.tsx` — 백엔드 `PitcherDetail` 스키마와 정렬  
+  (현재 `face_scores` + `today_fortune` 분리 구조 미반영 가능성)
+- [ ] **D-3** `PitcherProfile` 타입 → `PitcherDetail`로 정렬 또는 제거  
+  (`hand` 필드, `scores` 합산 구조 백엔드 불일치)
+- [ ] **D-4** Share card PNG 생성 (`html-to-image`) — Phase 6 범위
 
-- [ ] **D-1 (CRITICAL)** api.ts `|| true` 제거 (C1)
-- [ ] **D-2 (CRITICAL)** page.tsx 타입 캐스팅 수정 + expand 시 matchup detail fetch (C2)
-- [ ] **D-3** 하드코딩 날짜 전부 동적으로 교체 (C3, I1, I6)
-- [ ] **D-4** 인라인 스타일 → Tailwind 토큰 (I2)
-- [ ] **D-5** api.ts getHistory() `.matchups` 언래핑 (I5)
-- [ ] **D-6** 백엔드 MatchupSummary에 game_time/series_label 추가 (C4)
-- [ ] **D-7** PitcherProfile 타입 PitcherDetail과 정렬 (C5)
-- [ ] **D-8** 360px 모바일 뷰포트 실기동 테스트
-- [ ] **D-9** Share card PNG 생성 (Phase 6)
+#### F. 백엔드 잔여
+- [ ] **F-1** `Matchup` 모델에 `chemistry_comment` 컬럼 추가  
+  (현재 `matchup.py`에서 `chemistry_comment=None` 하드코딩)
+- [ ] **F-2** `MatchupSummary`의 `game_time`/`series_label` 실제 값 채우기  
+  (`daily_schedules` JOIN 또는 `Matchup` 컬럼 추가)
+- [ ] **F-3** `/api/history` 응답에 `actual_winner`/`prediction_correct` 포함  
+  (현재 `MatchupSummary` 기반이므로 이 필드 없음 — `HistoryMatchup` 확장 필요)
+- [ ] **F-4** `AccuracyResponse` 메모리 풀스캔 → SQL COUNT/SUM 쿼리로 교체
+
+### 🟢 Nice-to-have
+
+#### A. 크롤러 마무리
+- [ ] **A-5** `pitchers.kbo_player_id` 컬럼 + ID 기반 매처 (동명이인 안전망)
+- [ ] **A-6** `seed_pitchers.py` KBO 프로필 수확기 (생년월일/사진 자동 시드)
+
+#### C. 운영 잔여
+- [ ] `_append_review` dedup/concurrency
+- [ ] `publish_matchups` `is_published.is_(False)` 필터
+- [ ] Alembic 도입 여부 결정 (prod Postgres 전환 전)
 
 ---
 
 ## Phase 6 로드맵
 
-- docker-compose, 면책 고지, Vercel + Railway 배포, GitHub Actions 게이트, 공유 카드 PNG
+- docker-compose, Vercel + Railway 배포, GitHub Actions CI 게이트
+- 면책 고지 전 페이지 노출 확인
+- Share card PNG (`html-to-image`)
+- SNS 자동 포스팅 (확장)

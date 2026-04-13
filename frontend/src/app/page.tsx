@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { getTodayMatchups } from "@/lib/api";
-import type { MatchupDetail } from "@/types";
+import type { MatchupSummary } from "@/types";
 import MatchupCard from "@/components/MatchupCard";
 import Footer from "@/components/Footer";
 
@@ -15,16 +15,16 @@ function formatDateKo(dateStr: string): string {
 }
 
 export default async function TodayMatchupsPage() {
-  let matchups: MatchupDetail[] = [];
+  let matchups: MatchupSummary[] = [];
   let error: string | null = null;
 
   try {
-    matchups = (await getTodayMatchups()) as MatchupDetail[];
+    matchups = await getTodayMatchups();
   } catch (e) {
     error = e instanceof Error ? e.message : "데이터를 불러올 수 없습니다.";
   }
 
-  const today = formatDateKo("2026-04-13");
+  const today = formatDateKo(new Date().toISOString().split("T")[0]);
 
   return (
     <main className="min-h-screen antialiased bg-bg">
@@ -43,15 +43,14 @@ export default async function TodayMatchupsPage() {
             KBO · 2026 · SEASON
           </p>
           <h1
-            className="text-[3.15rem] font-bold tracking-tight md:text-[4.2rem]"
-            style={{ color: "#0A192F" }}
+            className="text-[3.15rem] font-bold tracking-tight text-[#0A192F] md:text-[4.2rem]"
           >
             FACEMETRICS
           </h1>
           <p className="mt-3 text-lg text-ink-muted md:text-xl">
             관상과 운세로 보는 오늘의 승리투수
           </p>
-          <p className="mt-5 text-base italic" style={{ color: "#B8860B" }}>
+          <p className="mt-5 text-base italic text-[#B8860B]">
             &ldquo;확률이 반반이면 관상이 답이다&rdquo;
           </p>
           <nav className="mt-8 flex items-center justify-center gap-6 text-xs text-ink-muted">
@@ -95,7 +94,7 @@ export default async function TodayMatchupsPage() {
               {matchups.map((matchup, i) => (
                 <MatchupCard
                   key={matchup.matchup_id}
-                  matchup={matchup}
+                  summary={matchup}
                   animationDelay={i * 0.1}
                 />
               ))}

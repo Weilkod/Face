@@ -4,6 +4,7 @@ import type {
   PitcherProfile,
   AccuracyStats,
   HistoryMatchup,
+  HistoryResponse,
 } from "@/types";
 import {
   MOCK_MATCHUPS,
@@ -14,7 +15,7 @@ import {
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true" || true;
+const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 
 async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
@@ -68,7 +69,8 @@ export async function getPitcher(id: number): Promise<PitcherProfile> {
 
 export async function getHistory(date: string): Promise<HistoryMatchup[]> {
   if (USE_MOCK) return MOCK_HISTORY_MATCHUPS;
-  return fetchJson<HistoryMatchup[]>(`/api/history?date=${date}`);
+  const response = await fetchJson<HistoryResponse>(`/api/history?date=${date}`);
+  return response.matchups as HistoryMatchup[];
 }
 
 export async function getAccuracy(): Promise<AccuracyStats> {

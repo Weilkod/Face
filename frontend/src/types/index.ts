@@ -123,3 +123,8 @@ export interface HistoryMatchup extends MatchupSummary {
   actual_winner: string | null;
   prediction_correct: boolean | null;
 }
+
+export interface HistoryResponse {
+  date: string;
+  matchups: HistoryMatchup[];
+}

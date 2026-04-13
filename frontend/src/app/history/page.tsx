@@ -18,7 +18,7 @@ function formatDateKo(dateStr: string): string {
 }
 
 function yesterday(): string {
-  const d = new Date("2026-04-13");
+  const d = new Date();
   d.setDate(d.getDate() - 1);
   return d.toISOString().split("T")[0];
 }
@@ -80,7 +80,7 @@ export default async function HistoryPage({ searchParams }: Props) {
               type="date"
               name="date"
               defaultValue={date}
-              max="2026-04-12"
+              max={new Date().toISOString().split("T")[0]}
               className="rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm text-ink shadow-sm outline-none focus:border-coral focus:ring-1 focus:ring-coral"
             />
             <button

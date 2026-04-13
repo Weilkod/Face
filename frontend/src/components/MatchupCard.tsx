@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import type { MatchupDetail } from "@/types";
+import type { MatchupSummary, MatchupDetail } from "@/types";
+import { getMatchupDetail } from "@/lib/api";
 import ScoreBar from "./ScoreBar";
 import RadarChart from "./RadarChart";
 import AxisDetail from "./AxisDetail";
 
 interface MatchupCardProps {
-  matchup: MatchupDetail;
+  summary: MatchupSummary;
   animationDelay?: number;
 }
 
@@ -20,12 +21,16 @@ const AXIS_META = [
 ] as const;
 
 export default function MatchupCard({
-  matchup,
+  summary,
   animationDelay = 0,
 }: MatchupCardProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [detail, setDetail] = useState<MatchupDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   const {
+    matchup_id,
     home_pitcher,
     away_pitcher,
     home_total,
@@ -35,25 +40,24 @@ export default function MatchupCard({
     stadium,
     game_time,
     series_label,
-    home_scores,
-    away_scores,
-    chemistry,
-  } = matchup;
+  } = summary;
 
-  const homeRadar = [
-    home_scores.command.total,
-    home_scores.stuff.total,
-    home_scores.composure.total,
-    home_scores.dominance.total,
-    home_scores.destiny.total,
-  ];
-  const awayRadar = [
-    away_scores.command.total,
-    away_scores.stuff.total,
-    away_scores.composure.total,
-    away_scores.dominance.total,
-    away_scores.destiny.total,
-  ];
+  async function handleExpand() {
+    const next = !isOpen;
+    setIsOpen(next);
+    if (next && detail === null && !detailLoading) {
+      setDetailLoading(true);
+      setDetailError(null);
+      try {
+        const d = await getMatchupDetail(matchup_id);
+        setDetail(d);
+      } catch (e) {
+        setDetailError(e instanceof Error ? e.message : "상세 정보를 불러올 수 없습니다.");
+      } finally {
+        setDetailLoading(false);
+      }
+    }
+  }
 
   const isHomeWinner = predicted_winner === home_pitcher.name;
   const winnerTotal = isHomeWinner ? home_total : away_total;
@@ -66,6 +70,26 @@ export default function MatchupCard({
     series_label?.includes("더블") ? "bg-emerald-100 text-emerald-800"
     : series_label?.includes("개막") ? "bg-orange-100 text-orange-800"
     : "bg-blue-100 text-blue-800";
+
+  const homeRadar = detail
+    ? [
+        detail.home_scores.command.total,
+        detail.home_scores.stuff.total,
+        detail.home_scores.composure.total,
+        detail.home_scores.dominance.total,
+        detail.home_scores.destiny.total,
+      ]
+    : null;
+
+  const awayRadar = detail
+    ? [
+        detail.away_scores.command.total,
+        detail.away_scores.stuff.total,
+        detail.away_scores.composure.total,
+        detail.away_scores.dominance.total,
+        detail.away_scores.destiny.total,
+      ]
+    : null;
 
   return (
     <div
@@ -152,7 +176,7 @@ export default function MatchupCard({
 
         {/* Expand button */}
         <button
-          onClick={() => setIsOpen((v) => !v)}
+          onClick={handleExpand}
           className="mt-4 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full bg-coral-light py-3 text-xs font-semibold text-coral transition hover:bg-coral/15"
           aria-expanded={isOpen}
         >
@@ -174,114 +198,132 @@ export default function MatchupCard({
         {isOpen && (
           <div className="mt-8 space-y-8">
 
-            {/* Radar chart */}
-            <div className="rounded-2xl border border-black/5 bg-gray-50 p-6">
-              <div className="mb-4 flex items-center justify-center gap-3">
-                <div className="h-px w-8 bg-coral/30" />
-                <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-coral">
-                  Five Elements
-                </span>
-                <div className="h-px w-8 bg-coral/30" />
-              </div>
-              <RadarChart
-                homeScores={homeRadar}
-                awayScores={awayRadar}
-                homeName={home_pitcher.name}
-                awayName={away_pitcher.name}
-                homeTotal={home_total}
-                awayTotal={away_total}
-                animated={true}
-              />
-            </div>
-
-            {/* 5-axis detail blocks */}
-            <div className="space-y-4">
-              {AXIS_META.map((axis, i) => (
-                <AxisDetail
-                  key={axis.key}
-                  icon={axis.icon}
-                  label={axis.label}
-                  labelEn={axis.labelEn}
-                  homeName={home_pitcher.name}
-                  awayName={away_pitcher.name}
-                  home={home_scores[axis.key]}
-                  away={away_scores[axis.key]}
-                  animationDelay={i * 0.05}
-                />
-              ))}
-            </div>
-
-            {/* Chemistry analysis */}
-            {chemistry && (
-              <div className="rounded-2xl border border-coral/20 bg-coral-light p-6">
-                <div className="mb-3 flex items-center gap-2">
-                  <span>⚔️</span>
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-coral">
-                    상성 분석 · Chemistry
-                  </span>
-                </div>
-                <p className="text-sm leading-relaxed text-ink-muted">
-                  <span className="font-semibold text-ink">띠:</span>{" "}
-                  {chemistry.zodiac_detail}
-                </p>
-                <p className="mt-1 text-sm leading-relaxed text-ink-muted">
-                  <span className="font-semibold text-ink">원소:</span>{" "}
-                  {chemistry.element_detail}
-                </p>
-                <p className="mt-3 text-xs italic text-ink-faint">
-                  {chemistry.chemistry_comment}
-                </p>
+            {/* Loading state */}
+            {detailLoading && (
+              <div className="flex items-center justify-center py-12">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-coral border-t-transparent" />
               </div>
             )}
 
-            {/* Winner card */}
-            <div className="stripes rounded-2xl bg-coral p-10 text-center">
-              <div className="relative">
-                <div className="mb-4 text-[11px] font-semibold uppercase tracking-[0.4em] text-white/80">
-                  오늘의 FACEMETRICS 승자
-                </div>
-                <div className="flex items-center justify-center gap-4">
-                  <span className="text-2xl">⭐</span>
-                  <h3 className="text-4xl font-bold text-white sm:text-5xl">
-                    {predicted_winner}
-                  </h3>
-                  <span className="text-2xl">⭐</span>
-                </div>
-                <div className="mt-3 flex items-center justify-center gap-3 text-xl font-bold">
-                  <span className="text-white">{winnerTotal}</span>
-                  <span className="text-base font-medium text-white/70">vs</span>
-                  <span className="text-white/80">{loserTotal}</span>
-                </div>
-                {winner_comment && (
-                  <p className="mx-auto mt-5 max-w-sm text-sm italic text-white/90">
-                    &ldquo;{winner_comment}&rdquo;
-                  </p>
-                )}
-                <div className="mt-8 flex items-center justify-center gap-6 text-[11px] font-medium text-white/80">
-                  {home_scores.lucky_inning != null && (
-                    <div className="flex items-center gap-2">
-                      <span>🎰</span>
-                      <span>
-                        {home_pitcher.name} · {home_scores.lucky_inning}회
-                      </span>
-                    </div>
-                  )}
-                  {home_scores.lucky_inning != null &&
-                    away_scores.lucky_inning != null && (
-                      <span className="h-1 w-1 rounded-full bg-white/50" />
-                    )}
-                  {away_scores.lucky_inning != null && (
-                    <div className="flex items-center gap-2">
-                      <span>🎰</span>
-                      <span>
-                        {away_pitcher.name} · {away_scores.lucky_inning}회
-                      </span>
-                    </div>
-                  )}
-                </div>
+            {/* Error state */}
+            {detailError && (
+              <div className="rounded-2xl bg-red-50 p-6 text-center text-sm text-red-600">
+                {detailError}
               </div>
-            </div>
+            )}
 
+            {/* Detail content */}
+            {detail && homeRadar && awayRadar && (
+              <>
+                {/* Radar chart */}
+                <div className="rounded-2xl border border-black/5 bg-gray-50 p-6">
+                  <div className="mb-4 flex items-center justify-center gap-3">
+                    <div className="h-px w-8 bg-coral/30" />
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-coral">
+                      Five Elements
+                    </span>
+                    <div className="h-px w-8 bg-coral/30" />
+                  </div>
+                  <RadarChart
+                    homeScores={homeRadar}
+                    awayScores={awayRadar}
+                    homeName={home_pitcher.name}
+                    awayName={away_pitcher.name}
+                    homeTotal={home_total}
+                    awayTotal={away_total}
+                    animated={true}
+                  />
+                </div>
+
+                {/* 5-axis detail blocks */}
+                <div className="space-y-4">
+                  {AXIS_META.map((axis, i) => (
+                    <AxisDetail
+                      key={axis.key}
+                      icon={axis.icon}
+                      label={axis.label}
+                      labelEn={axis.labelEn}
+                      homeName={home_pitcher.name}
+                      awayName={away_pitcher.name}
+                      home={detail.home_scores[axis.key]}
+                      away={detail.away_scores[axis.key]}
+                      animationDelay={i * 0.05}
+                    />
+                  ))}
+                </div>
+
+                {/* Chemistry analysis */}
+                {detail.chemistry && (
+                  <div className="rounded-2xl border border-coral/20 bg-coral-light p-6">
+                    <div className="mb-3 flex items-center gap-2">
+                      <span>⚔️</span>
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-coral">
+                        상성 분석 · Chemistry
+                      </span>
+                    </div>
+                    <p className="text-sm leading-relaxed text-ink-muted">
+                      <span className="font-semibold text-ink">띠:</span>{" "}
+                      {detail.chemistry.zodiac_detail}
+                    </p>
+                    <p className="mt-1 text-sm leading-relaxed text-ink-muted">
+                      <span className="font-semibold text-ink">원소:</span>{" "}
+                      {detail.chemistry.element_detail}
+                    </p>
+                    <p className="mt-3 text-xs italic text-ink-faint">
+                      {detail.chemistry.chemistry_comment}
+                    </p>
+                  </div>
+                )}
+
+                {/* Winner card */}
+                <div className="stripes rounded-2xl bg-coral p-10 text-center">
+                  <div className="relative">
+                    <div className="mb-4 text-[11px] font-semibold uppercase tracking-[0.4em] text-white/80">
+                      오늘의 FACEMETRICS 승자
+                    </div>
+                    <div className="flex items-center justify-center gap-4">
+                      <span className="text-2xl">⭐</span>
+                      <h3 className="text-4xl font-bold text-white sm:text-5xl">
+                        {predicted_winner}
+                      </h3>
+                      <span className="text-2xl">⭐</span>
+                    </div>
+                    <div className="mt-3 flex items-center justify-center gap-3 text-xl font-bold">
+                      <span className="text-white">{winnerTotal}</span>
+                      <span className="text-base font-medium text-white/70">vs</span>
+                      <span className="text-white/80">{loserTotal}</span>
+                    </div>
+                    {winner_comment && (
+                      <p className="mx-auto mt-5 max-w-sm text-sm italic text-white/90">
+                        &ldquo;{winner_comment}&rdquo;
+                      </p>
+                    )}
+                    <div className="mt-8 flex items-center justify-center gap-6 text-[11px] font-medium text-white/80">
+                      {detail.home_scores.lucky_inning != null && (
+                        <div className="flex items-center gap-2">
+                          <span>🎰</span>
+                          <span>
+                            {home_pitcher.name} · {detail.home_scores.lucky_inning}회
+                          </span>
+                        </div>
+                      )}
+                      {detail.home_scores.lucky_inning != null &&
+                        detail.away_scores.lucky_inning != null && (
+                          <span className="h-1 w-1 rounded-full bg-white/50" />
+                        )}
+                      {detail.away_scores.lucky_inning != null && (
+                        <div className="flex items-center gap-2">
+                          <span>🎰</span>
+                          <span>
+                            {away_pitcher.name} · {detail.away_scores.lucky_inning}회
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

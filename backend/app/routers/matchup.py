@@ -153,12 +153,13 @@ async def get_matchup_detail(
     home_scores = _build_pitcher_scores(home_face, home_fortune)
     away_scores = _build_pitcher_scores(away_face, away_fortune)
 
-    # Build chemistry commentary — textual only, the numeric score is stored
+    # Build chemistry detail — numeric score from DB; text fields populated
+    # once a dedicated chemistry_comment column is added to Matchup.
     chemistry = ChemistryDetail(
         zodiac_detail=None,
         element_detail=None,
         chemistry_score=matchup.chemistry_score,
-        chemistry_comment=matchup.winner_comment,
+        chemistry_comment=None,
     )
 
     return MatchupDetail(

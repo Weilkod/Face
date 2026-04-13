@@ -6,6 +6,7 @@ import { getMatchupDetail } from "@/lib/api";
 import ScoreBar from "./ScoreBar";
 import RadarChart from "./RadarChart";
 import AxisDetail from "./AxisDetail";
+import ShareButton from "./ShareButton";
 
 interface MatchupCardProps {
   summary: MatchupSummary;
@@ -193,6 +194,9 @@ export default function MatchupCard({
             <polyline points="6 9 12 15 18 9" />
           </svg>
         </button>
+
+        {/* Share card download (uses /api/og/matchup/[id] @vercel/og endpoint) */}
+        <ShareButton summary={summary} />
 
         {/* Expanded detail */}
         {isOpen && (

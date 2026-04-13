@@ -46,13 +46,34 @@
   - Tailwind 커스텀 색상 draft.html 픽셀 매칭, bar-fill 애니메이션  
   - 레거시 `shine-border.tsx`, `timeline.tsx` 삭제
 
+- [x] **Phase 6 sub-task 1** — Alembic 마이그레이션 도입 ✅ (2026-04-13, 세션 5)  
+  브랜치: `claude/add-alembic-vercel-og-rIYEo`  
+  - `backend/alembic.ini`, `backend/alembic/env.py` (async `aiosqlite`/`asyncpg` 모두 지원)  
+  - `backend/alembic/versions/0001_initial_schema.py` — Phase 4 스키마 그대로 5 테이블  
+  - `requirements.txt` 에 `alembic==1.13.3` 추가  
+  - `scripts/init_db.py` 가 `Base.metadata.create_all` → `command.upgrade(cfg, 'head')` 로 교체  
+  - 검증: 신규 SQLite 에 `upgrade head` → `downgrade base` 라운드트립 OK,  
+    SQLAlchemy `Base.metadata` ↔ alembic 실제 컬럼 drift 0건  
+  - SQLite 는 `render_as_batch=True` 로 향후 ALTER 안전, env.py 는 런타임에 `app.config.get_settings().database_url` 주입
+
+- [x] **Phase 6 sub-task 2** — 공유 카드 (@vercel/og) ✅ (2026-04-13, 세션 5)  
+  브랜치: `claude/add-alembic-vercel-og-rIYEo`  
+  - `@vercel/og` ^0.11.1 추가 (`frontend/package.json`)  
+  - `frontend/src/app/api/og/matchup/[id]/route.tsx` — Edge Runtime, 1200×630 PNG  
+    · 쿼리스트링 only (`home/away/homeTotal/awayTotal/winner/...`)로 백엔드 round-trip 없이 edge 캐싱  
+    · `s-maxage=3600 stale-while-revalidate=86400` — 11:00 KST publish job 이후 점수가 frozen 이라 안전  
+    · 면책 푸터 ("엔터테인먼트 목적 · 베팅과 무관") CLAUDE.md §6 준수  
+  - `frontend/src/components/ShareButton.tsx` — `buildShareUrl()` + 다운로드 핸들러  
+  - `MatchupCard.tsx` 에 ShareButton 마운트, "공유 이미지 저장" 버튼  
+  - 검증: `npm run build` clean — 새 라우트 `ƒ /api/og/matchup/[id]` Edge 로 등록
+
 ---
 
-## 현재 상태 (세션 4 기준, 2026-04-13)
+## 현재 상태 (세션 5 기준, 2026-04-13)
 
-Phase 4 라우터 + Phase 5 프론트엔드 구조 완성.  
-`npm run build` clean, 4개 라우트 컴파일 확인.  
-**코드 리뷰어가 BLOCK 판정한 미수정 이슈들이 다음 세션의 첫 작업.**
+Phase 4 라우터 + Phase 5 프론트엔드 구조 + Phase 6 **Alembic** & **@vercel/og** 도입 완성.  
+`npm run build` clean (5개 라우트, OG edge route 포함), 백엔드 alembic upgrade/downgrade 라운드트립 OK.  
+**세션 4 코드 리뷰어 BLOCK 이슈들 (C1~C5, I1~I6)은 여전히 미수정 상태 — 다음 세션 우선 작업.**
 
 ---
 
@@ -145,7 +166,7 @@ git push
 - [ ] `_append_review` dedup, concurrency
 - [ ] `publish_matchups` — `is_published.is_(False)` 필터 추가
 - [ ] `analyze_and_score_matchups` — pitcher `IN [...]` 배치 로드
-- [ ] Alembic 도입 여부 결정
+- [x] Alembic 도입 — 세션 5 완료 (`backend/alembic/`, init_db.py 전환)
 
 ### D. Phase 5 프론트엔드 잔여
 
@@ -157,7 +178,7 @@ git push
 - [ ] **D-6** 백엔드 MatchupSummary에 game_time/series_label 추가 (C4)
 - [ ] **D-7** PitcherProfile 타입 PitcherDetail과 정렬 (C5)
 - [ ] **D-8** 360px 모바일 뷰포트 실기동 테스트
-- [ ] **D-9** Share card PNG 생성 (Phase 6)
+- [x] **D-9** Share card PNG 생성 — `@vercel/og` Edge route + ShareButton (세션 5)
 
 ---
 

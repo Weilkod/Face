@@ -1,0 +1,26 @@
+{
+  "_meta": {
+    "source": "README.md §2-3",
+    "description": "12별자리 → 4원소 매핑 및 서양 점성술 날짜 범위. 운명력 상성 계산에 사용.",
+    "element_compat": {
+      "same": {"delta": 1.0, "note": "같은 원소 (동질)"},
+      "harmony": {"delta": 1.5, "pairs": [["불", "바람"], ["물", "흙"]], "note": "상생"},
+      "clash": {"delta": -1.0, "pairs": [["불", "물"], ["바람", "흙"]], "note": "상극"},
+      "neutral": {"delta": 0.0, "note": "나머지 조합"}
+    }
+  },
+  "signs": [
+    {"name": "양자리",   "en": "Aries",       "element": "불",   "start": "03-21", "end": "04-19"},
+    {"name": "황소자리", "en": "Taurus",      "element": "흙",   "start": "04-20", "end": "05-20"},
+    {"name": "쌍둥이자리","en": "Gemini",      "element": "바람", "start": "05-21", "end": "06-21"},
+    {"name": "게자리",   "en": "Cancer",      "element": "물",   "start": "06-22", "end": "07-22"},
+    {"name": "사자자리", "en": "Leo",         "element": "불",   "start": "07-23", "end": "08-22"},
+    {"name": "처녀자리", "en": "Virgo",       "element": "흙",   "start": "08-23", "end": "09-22"},
+    {"name": "천칭자리", "en": "Libra",       "element": "바람", "start": "09-23", "end": "10-22"},
+    {"name": "전갈자리", "en": "Scorpio",     "element": "물",   "start": "10-23", "end": "11-21"},
+    {"name": "사수자리", "en": "Sagittarius", "element": "불",   "start": "11-22", "end": "12-21"},
+    {"name": "염소자리", "en": "Capricorn",   "element": "흙",   "start": "12-22", "end": "01-19"},
+    {"name": "물병자리", "en": "Aquarius",    "element": "바람", "start": "01-20", "end": "02-18"},
+    {"name": "물고기자리","en": "Pisces",      "element": "물",   "start": "02-19", "end": "03-20"}
+  ]
+}

@@ -53,3 +53,4 @@ data/pitcher_images/*.webp
 
 # Claude Code local
 .claude/settings.local.json
+.claude/.last-reviewed-hash

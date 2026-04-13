@@ -1,0 +1,91 @@
+{
+  "_meta": {
+    "season": 2026,
+    "description": "FACEMETRICS 시즌 초기 선발투수 마스터 리스트. scripts/seed_pitchers.py 가 이 파일을 읽어 pitchers 테이블로 upsert 한다. birth_date 는 공개 프로필 기준 best-effort. 실제 확정 로스터는 데일리 크롤러가 업데이트.",
+    "teams_covered": ["SAM", "DS", "KIA", "SSG", "LG", "LOT", "HH", "NC"],
+    "teams_pending": ["KT", "KW"],
+    "note": "KT / KW 로테이션은 크롤러 런칭 시 확정."
+  },
+  "pitchers": [
+    {
+      "name": "원태인",
+      "name_en": "Won Tae-in",
+      "team": "SAM",
+      "birth_date": "2000-04-06",
+      "blood_type": null,
+      "manifest_index": 1
+    },
+    {
+      "name": "곽빈",
+      "name_en": "Kwak Bin",
+      "team": "DS",
+      "birth_date": "1999-05-28",
+      "blood_type": null,
+      "manifest_index": 2
+    },
+    {
+      "name": "네일",
+      "name_en": "James Naile",
+      "team": "KIA",
+      "birth_date": "1993-05-23",
+      "blood_type": null,
+      "manifest_index": 3
+    },
+    {
+      "name": "카스타노",
+      "name_en": "Daniel Castano",
+      "team": "SSG",
+      "birth_date": "1994-09-17",
+      "blood_type": null,
+      "manifest_index": 4
+    },
+    {
+      "name": "손주영",
+      "name_en": "Son Ju-young",
+      "team": "LG",
+      "birth_date": "1998-06-09",
+      "blood_type": null,
+      "manifest_index": 5
+    },
+    {
+      "name": "박세웅",
+      "name_en": "Park Se-woong",
+      "team": "LOT",
+      "birth_date": "1995-11-30",
+      "blood_type": null,
+      "manifest_index": 6
+    },
+    {
+      "name": "임찬규",
+      "name_en": "Lim Chan-kyu",
+      "team": "LG",
+      "birth_date": "1992-11-20",
+      "blood_type": null,
+      "manifest_index": 7
+    },
+    {
+      "name": "문동주",
+      "name_en": "Moon Dong-ju",
+      "team": "HH",
+      "birth_date": "2003-12-23",
+      "blood_type": null,
+      "manifest_index": 8
+    },
+    {
+      "name": "양현종",
+      "name_en": "Yang Hyeon-jong",
+      "team": "KIA",
+      "birth_date": "1988-03-01",
+      "blood_type": null,
+      "manifest_index": 9
+    },
+    {
+      "name": "하트",
+      "name_en": "Kyle Hart",
+      "team": "NC",
+      "birth_date": "1992-11-23",
+      "blood_type": null,
+      "manifest_index": 10
+    }
+  ]
+}

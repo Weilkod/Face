@@ -70,6 +70,12 @@
       0 8px 24px rgba(17, 24, 39, 0.05);
   }
 
+  /* ── Color emoji 강제 (Windows 흑백 글리프 방지) ────────────── */
+  .emoji {
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+    color: initial;
+  }
+
   /* ── Winner 카드 대각선 스트라이프 ────────────────────────── */
   .stripes { position: relative; overflow: hidden; }
   .stripes::before {
@@ -237,10 +243,9 @@
                     <span>🎯</span>
                     <span class="text-sm font-semibold text-ink">제구력 · Command</span>
                   </div>
-                  <div class="flex items-center gap-2 text-[11px] font-semibold">
-                    <span class="text-coral">16 엔스</span>
-                    <span class="text-ink-faint">·</span>
-                    <span class="text-mint-dark">14 곽빈</span>
+                  <div class="flex items-center gap-1.5 text-[11px] font-semibold">
+                    <span class="text-coral">(16, 엔스)</span>
+                    <span class="text-mint-dark">(14, 곽빈)</span>
                   </div>
                 </div>
                 <div class="flex items-center gap-3">
@@ -256,12 +261,12 @@
                 <div class="mt-4 grid gap-3 text-[11px] leading-relaxed sm:grid-cols-2">
                   <div class="rounded-lg bg-coral-light p-3">
                     <div class="mb-2 text-[11px] font-semibold text-coral">엔스</div>
-                    <p class="text-ink-muted"><span class="font-semibold text-coral">🙂 관상 9 :</span> 흔들림 없는 눈매가 코너를 찌르는 제구의 기운을 품었다</p>
+                    <p class="text-ink-muted"><span class="emoji">🙂</span> <span class="font-semibold text-coral">관상 9 :</span> 흔들림 없는 눈매가 코너를 찌르는 제구의 기운을 품었다</p>
                     <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-coral">✨ 운세 7 :</span> 전갈자리 집중운 상위, 사사구 리스크 최소</p>
                   </div>
                   <div class="rounded-lg bg-mint-light p-3">
                     <div class="mb-2 text-[11px] font-semibold text-mint-dark">곽빈</div>
-                    <p class="text-ink-muted"><span class="font-semibold text-mint-dark">🙂 관상 8 :</span> 눈과 눈썹 간격이 적당해 여유 있는 시야를 확보</p>
+                    <p class="text-ink-muted"><span class="emoji">🙂</span> <span class="font-semibold text-mint-dark">관상 8 :</span> 눈과 눈썹 간격이 적당해 여유 있는 시야를 확보</p>
                     <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-mint-dark">✨ 운세 6 :</span> 물고기자리 정밀운 평이, 볼끝이 살짝 흔들릴 수 있다</p>
                   </div>
                 </div>
@@ -274,10 +279,9 @@
                     <span>💥</span>
                     <span class="text-sm font-semibold text-ink">구위 · Stuff</span>
                   </div>
-                  <div class="flex items-center gap-2 text-[11px] font-semibold">
-                    <span class="text-coral">17 엔스</span>
-                    <span class="text-ink-faint">·</span>
-                    <span class="text-mint-dark">12 곽빈</span>
+                  <div class="flex items-center gap-1.5 text-[11px] font-semibold">
+                    <span class="text-coral">(17, 엔스)</span>
+                    <span class="text-mint-dark">(12, 곽빈)</span>
                   </div>
                 </div>
                 <div class="flex items-center gap-3">
@@ -293,12 +297,12 @@
                 <div class="mt-4 grid gap-3 text-[11px] leading-relaxed sm:grid-cols-2">
                   <div class="rounded-lg bg-coral-light p-3">
                     <div class="mb-2 text-[11px] font-semibold text-coral">엔스</div>
-                    <p class="text-ink-muted"><span class="font-semibold text-coral">🙂 관상 10 :</span> 각진 턱과 단단한 하관에 파워 피처의 상이 그대로</p>
+                    <p class="text-ink-muted"><span class="emoji">🙂</span> <span class="font-semibold text-coral">관상 10 :</span> 각진 턱과 단단한 하관에 파워 피처의 상이 그대로</p>
                     <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-coral">✨ 운세 7 :</span> 용띠 체력운 양호, 마운드에서 힘이 남아돈다</p>
                   </div>
                   <div class="rounded-lg bg-mint-light p-3">
                     <div class="mb-2 text-[11px] font-semibold text-mint-dark">곽빈</div>
-                    <p class="text-ink-muted"><span class="font-semibold text-mint-dark">🙂 관상 7 :</span> 둥근 턱에 힘이 실리지만 폭발력은 다소 부족</p>
+                    <p class="text-ink-muted"><span class="emoji">🙂</span> <span class="font-semibold text-mint-dark">관상 7 :</span> 둥근 턱에 힘이 실리지만 폭발력은 다소 부족</p>
                     <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-mint-dark">✨ 운세 5 :</span> 뱀띠 활력운 중립, 초반 구속이 평소보다 낮을 수 있다</p>
                   </div>
                 </div>
@@ -311,10 +315,9 @@
                     <span>🧘</span>
                     <span class="text-sm font-semibold text-ink">멘탈 · Composure</span>
                   </div>
-                  <div class="flex items-center gap-2 text-[11px] font-semibold">
-                    <span class="text-coral">15 엔스</span>
-                    <span class="text-ink-faint">·</span>
-                    <span class="text-mint-dark">16 곽빈</span>
+                  <div class="flex items-center gap-1.5 text-[11px] font-semibold">
+                    <span class="text-coral">(15, 엔스)</span>
+                    <span class="text-mint-dark">(16, 곽빈)</span>
                   </div>
                 </div>
                 <div class="flex items-center gap-3">
@@ -330,12 +333,12 @@
                 <div class="mt-4 grid gap-3 text-[11px] leading-relaxed sm:grid-cols-2">
                   <div class="rounded-lg bg-coral-light p-3">
                     <div class="mb-2 text-[11px] font-semibold text-coral">엔스</div>
-                    <p class="text-ink-muted"><span class="font-semibold text-coral">🙂 관상 7 :</span> 이마는 평이하나 인중이 뚜렷해 인내심은 충분</p>
+                    <p class="text-ink-muted"><span class="emoji">🙂</span> <span class="font-semibold text-coral">관상 7 :</span> 이마는 평이하나 인중이 뚜렷해 인내심은 충분</p>
                     <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-coral">✨ 운세 8 :</span> 전갈자리 정신운 견고, 위기에 흔들리지 않는다</p>
                   </div>
                   <div class="rounded-lg bg-mint-light p-3">
                     <div class="mb-2 text-[11px] font-semibold text-mint-dark">곽빈</div>
-                    <p class="text-ink-muted"><span class="font-semibold text-mint-dark">🙂 관상 9 :</span> 넓은 이마에 흔들림 없는 멘탈의 상이 보인다</p>
+                    <p class="text-ink-muted"><span class="emoji">🙂</span> <span class="font-semibold text-mint-dark">관상 9 :</span> 넓은 이마에 흔들림 없는 멘탈의 상이 보인다</p>
                     <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-mint-dark">✨ 운세 7 :</span> 물고기자리 인내운 양호, 유연하게 상황을 받아낸다</p>
                   </div>
                 </div>
@@ -348,10 +351,9 @@
                     <span>👑</span>
                     <span class="text-sm font-semibold text-ink">지배력 · Dominance</span>
                   </div>
-                  <div class="flex items-center gap-2 text-[11px] font-semibold">
-                    <span class="text-coral">18 엔스</span>
-                    <span class="text-ink-faint">·</span>
-                    <span class="text-mint-dark">15 곽빈</span>
+                  <div class="flex items-center gap-1.5 text-[11px] font-semibold">
+                    <span class="text-coral">(18, 엔스)</span>
+                    <span class="text-mint-dark">(15, 곽빈)</span>
                   </div>
                 </div>
                 <div class="flex items-center gap-3">
@@ -367,12 +369,12 @@
                 <div class="mt-4 grid gap-3 text-[11px] leading-relaxed sm:grid-cols-2">
                   <div class="rounded-lg bg-coral-light p-3">
                     <div class="mb-2 text-[11px] font-semibold text-coral">엔스</div>
-                    <p class="text-ink-muted"><span class="font-semibold text-coral">🙂 관상 10 :</span> 짙고 기세 있는 눈썹이 마운드를 장악하는 카리스마</p>
+                    <p class="text-ink-muted"><span class="emoji">🙂</span> <span class="font-semibold text-coral">관상 10 :</span> 짙고 기세 있는 눈썹이 마운드를 장악하는 카리스마</p>
                     <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-coral">✨ 운세 8 :</span> 전갈자리 승부운 절정, 상대 타선을 압박한다</p>
                   </div>
                   <div class="rounded-lg bg-mint-light p-3">
                     <div class="mb-2 text-[11px] font-semibold text-mint-dark">곽빈</div>
-                    <p class="text-ink-muted"><span class="font-semibold text-mint-dark">🙂 관상 8 :</span> 좌우 균형 잡힌 이목구비로 안정된 퍼포먼스</p>
+                    <p class="text-ink-muted"><span class="emoji">🙂</span> <span class="font-semibold text-mint-dark">관상 8 :</span> 좌우 균형 잡힌 이목구비로 안정된 퍼포먼스</p>
                     <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-mint-dark">✨ 운세 7 :</span> 뱀띠 권위운 무난, 이닝 소화력이 보장된다</p>
                   </div>
                 </div>
@@ -385,10 +387,9 @@
                     <span>✨</span>
                     <span class="text-sm font-semibold text-ink">운명력 · Destiny</span>
                   </div>
-                  <div class="flex items-center gap-2 text-[11px] font-semibold">
-                    <span class="text-coral">12 엔스</span>
-                    <span class="text-ink-faint">·</span>
-                    <span class="text-mint-dark">15 곽빈</span>
+                  <div class="flex items-center gap-1.5 text-[11px] font-semibold">
+                    <span class="text-coral">(12, 엔스)</span>
+                    <span class="text-mint-dark">(15, 곽빈)</span>
                   </div>
                 </div>
                 <div class="flex items-center gap-3">
@@ -404,12 +405,12 @@
                 <div class="mt-4 grid gap-3 text-[11px] leading-relaxed sm:grid-cols-2">
                   <div class="rounded-lg bg-coral-light p-3">
                     <div class="mb-2 text-[11px] font-semibold text-coral">엔스</div>
-                    <p class="text-ink-muted"><span class="font-semibold text-coral">🙂 관상 6 :</span> 첫인상은 무난하나 전체 인상 조화도가 평범</p>
+                    <p class="text-ink-muted"><span class="emoji">🙂</span> <span class="font-semibold text-coral">관상 6 :</span> 첫인상은 무난하나 전체 인상 조화도가 평범</p>
                     <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-coral">✨ 운세 6 :</span> 총운 평이, 용-뱀 중립 상성이 관건</p>
                   </div>
                   <div class="rounded-lg bg-mint-light p-3">
                     <div class="mb-2 text-[11px] font-semibold text-mint-dark">곽빈</div>
-                    <p class="text-ink-muted"><span class="font-semibold text-mint-dark">🙂 관상 7 :</span> 둥근 얼굴에 복이 있는 귀와 입의 조화가 보인다</p>
+                    <p class="text-ink-muted"><span class="emoji">🙂</span> <span class="font-semibold text-mint-dark">관상 7 :</span> 둥근 얼굴에 복이 있는 귀와 입의 조화가 보인다</p>
                     <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-mint-dark">✨ 운세 8 :</span> 물고기 총운 상승세, 물-물 원소 동질 +1</p>
                   </div>
                 </div>

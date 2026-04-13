@@ -1,0 +1,88 @@
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable.css');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  background: #f7f7f7;
+  color: #111827;
+}
+
+body {
+  font-family: "Pretendard Variable", Pretendard, system-ui, sans-serif;
+}
+
+@keyframes bar-fill {
+  from {
+    width: 0%;
+  }
+  to {
+    width: var(--pct, 0%);
+  }
+}
+
+.bar-fill {
+  animation: bar-fill 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-up {
+  animation: fade-up 0.7s ease-out both;
+}
+
+@keyframes radar-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.radar-in {
+  animation: radar-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+}
+
+.card-soft {
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04), 0 8px 24px rgba(17, 24, 39, 0.05);
+}
+
+/* Winner card diagonal stripes */
+.stripes {
+  position: relative;
+  overflow: hidden;
+}
+.stripes::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 10px,
+    rgba(255, 255, 255, 0.35) 10px,
+    rgba(255, 255, 255, 0.35) 11px
+  );
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* Color emoji fix (Windows) */
+.emoji {
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  color: initial;
+}

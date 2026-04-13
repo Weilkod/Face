@@ -13,12 +13,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.db import get_session
 from app.models.matchup import Matchup
 from app.models.pitcher import Pitcher
-from app.schemas.response import MatchupSummary, PitcherSummary, TodayResponse
+from app.routers._helpers import pitcher_summary
+from app.schemas.response import MatchupSummary, TodayResponse
 
 router = APIRouter()
 
@@ -29,27 +29,14 @@ def _day_of_week(d: date) -> str:
     return _DAY_OF_WEEK_KR[d.weekday()]
 
 
-def _pitcher_summary(pitcher: Pitcher) -> PitcherSummary:
-    return PitcherSummary(
-        pitcher_id=pitcher.pitcher_id,
-        name=pitcher.name,
-        name_en=pitcher.name_en,
-        team=pitcher.team,
-        chinese_zodiac=pitcher.chinese_zodiac,
-        zodiac_sign=pitcher.zodiac_sign,
-        zodiac_element=pitcher.zodiac_element,
-        profile_photo=pitcher.profile_photo,
-    )
-
-
 def _matchup_summary(matchup: Matchup, home: Pitcher, away: Pitcher) -> MatchupSummary:
     return MatchupSummary(
         matchup_id=matchup.matchup_id,
         home_team=matchup.home_team,
         away_team=matchup.away_team,
         stadium=matchup.stadium,
-        home_pitcher=_pitcher_summary(home),
-        away_pitcher=_pitcher_summary(away),
+        home_pitcher=pitcher_summary(home),
+        away_pitcher=pitcher_summary(away),
         home_total=matchup.home_total,
         away_total=matchup.away_total,
         predicted_winner=matchup.predicted_winner,

@@ -181,9 +181,9 @@ async def generate_fortune(
     failed = 0
 
     for sched in schedule_rows:
-        for starter_name, team in [
-            (sched.home_starter, sched.home_team),
-            (sched.away_starter, sched.away_team),
+        for starter_name, own_team, opp_team in [
+            (sched.home_starter, sched.home_team, sched.away_team),
+            (sched.away_starter, sched.away_team, sched.home_team),
         ]:
             if not starter_name:
                 skipped += 1
@@ -194,7 +194,7 @@ async def generate_fortune(
                 await session.execute(
                     select(Pitcher).where(
                         Pitcher.name == starter_name,
-                        Pitcher.team == team,
+                        Pitcher.team == own_team,
                     )
                 )
             ).scalar_one_or_none()
@@ -203,7 +203,7 @@ async def generate_fortune(
                 logger.warning(
                     "[admin:generate-fortune] pitcher not found: name=%s team=%s",
                     starter_name,
-                    team,
+                    own_team,
                 )
                 skipped += 1
                 continue
@@ -227,7 +227,7 @@ async def generate_fortune(
                     session,
                     pitcher,
                     target_date,
-                    opponent_team=team,
+                    opponent_team=opp_team,
                     stadium=sched.stadium or "미정",
                 )
                 generated += 1

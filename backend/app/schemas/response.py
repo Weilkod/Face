@@ -60,7 +60,7 @@ class ChemistryDetail(BaseModel):
 
     zodiac_detail: Optional[str] = None
     element_detail: Optional[str] = None
-    chemistry_score: float = Field(..., description="상성 점수 (clamp 0~4)")
+    chemistry_score: float = Field(..., ge=0.0, le=4.0, description="상성 점수 (clamp 0~4)")
     chemistry_comment: Optional[str] = None
 
 

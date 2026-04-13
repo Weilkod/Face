@@ -19,28 +19,15 @@ from app.models.face_score import FaceScore
 from app.models.fortune_score import FortuneScore
 from app.models.matchup import Matchup
 from app.models.pitcher import Pitcher
+from app.routers._helpers import pitcher_summary
 from app.schemas.response import (
     AxisBreakdown,
     ChemistryDetail,
     MatchupDetail,
     PitcherScores,
-    PitcherSummary,
 )
 
 router = APIRouter()
-
-
-def _pitcher_summary(pitcher: Pitcher) -> PitcherSummary:
-    return PitcherSummary(
-        pitcher_id=pitcher.pitcher_id,
-        name=pitcher.name,
-        name_en=pitcher.name_en,
-        team=pitcher.team,
-        chinese_zodiac=pitcher.chinese_zodiac,
-        zodiac_sign=pitcher.zodiac_sign,
-        zodiac_element=pitcher.zodiac_element,
-        profile_photo=pitcher.profile_photo,
-    )
 
 
 def _build_pitcher_scores(
@@ -118,14 +105,17 @@ async def get_matchup_detail(
         raise HTTPException(status_code=404, detail="Matchup not found")
 
     season = matchup.game_date.year
+    pitcher_ids = [matchup.home_pitcher_id, matchup.away_pitcher_id]
 
-    # Load both pitchers
-    home_pitcher = (
-        await session.execute(select(Pitcher).where(Pitcher.pitcher_id == matchup.home_pitcher_id))
-    ).scalar_one_or_none()
-    away_pitcher = (
-        await session.execute(select(Pitcher).where(Pitcher.pitcher_id == matchup.away_pitcher_id))
-    ).scalar_one_or_none()
+    # Batch-load both pitchers in a single query
+    pitchers: dict[int, Pitcher] = {
+        p.pitcher_id: p
+        for p in (
+            await session.execute(select(Pitcher).where(Pitcher.pitcher_id.in_(pitcher_ids)))
+        ).scalars().all()
+    }
+    home_pitcher = pitchers.get(matchup.home_pitcher_id)
+    away_pitcher = pitchers.get(matchup.away_pitcher_id)
 
     if home_pitcher is None or away_pitcher is None:
         raise HTTPException(status_code=404, detail="Pitcher record missing for this matchup")
@@ -183,8 +173,8 @@ async def get_matchup_detail(
         home_team=matchup.home_team,
         away_team=matchup.away_team,
         stadium=matchup.stadium,
-        home_pitcher=_pitcher_summary(home_pitcher),
-        away_pitcher=_pitcher_summary(away_pitcher),
+        home_pitcher=pitcher_summary(home_pitcher),
+        away_pitcher=pitcher_summary(away_pitcher),
         home_scores=home_scores,
         away_scores=away_scores,
         chemistry=chemistry,

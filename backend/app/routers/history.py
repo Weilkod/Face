@@ -17,22 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_session
 from app.models.matchup import Matchup
 from app.models.pitcher import Pitcher
-from app.schemas.response import HistoryResponse, MatchupSummary, PitcherSummary
+from app.routers._helpers import pitcher_summary
+from app.schemas.response import HistoryResponse, MatchupSummary
 
 router = APIRouter()
-
-
-def _pitcher_summary(pitcher: Pitcher) -> PitcherSummary:
-    return PitcherSummary(
-        pitcher_id=pitcher.pitcher_id,
-        name=pitcher.name,
-        name_en=pitcher.name_en,
-        team=pitcher.team,
-        chinese_zodiac=pitcher.chinese_zodiac,
-        zodiac_sign=pitcher.zodiac_sign,
-        zodiac_element=pitcher.zodiac_element,
-        profile_photo=pitcher.profile_photo,
-    )
 
 
 @router.get(
@@ -88,8 +76,8 @@ async def get_history(
                 home_team=m.home_team,
                 away_team=m.away_team,
                 stadium=m.stadium,
-                home_pitcher=_pitcher_summary(home),
-                away_pitcher=_pitcher_summary(away),
+                home_pitcher=pitcher_summary(home),
+                away_pitcher=pitcher_summary(away),
                 home_total=m.home_total,
                 away_total=m.away_total,
                 predicted_winner=m.predicted_winner,

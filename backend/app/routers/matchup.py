@@ -26,6 +26,7 @@ from app.schemas.response import (
     MatchupDetail,
     PitcherScores,
 )
+from app.services.chemistry_calculator import chemistry_for_pitchers
 
 router = APIRouter()
 
@@ -153,13 +154,27 @@ async def get_matchup_detail(
     home_scores = _build_pitcher_scores(home_face, home_fortune)
     away_scores = _build_pitcher_scores(away_face, away_fortune)
 
-    # Build chemistry detail — numeric score from DB; text fields populated
-    # once a dedicated chemistry_comment column is added to Matchup.
+    # Chemistry text fields:
+    #   - chemistry_comment: persisted on matchups (generated at scoring time)
+    #   - zodiac_detail / element_detail: derived live from the pure,
+    #     deterministic chemistry_calculator (no AI, no I/O beyond the one
+    #     JSON load that's lru_cached at module level)
+    breakdown = chemistry_for_pitchers(home_pitcher, away_pitcher)
+    zodiac_detail = (
+        f"{home_pitcher.chinese_zodiac}띠 vs {away_pitcher.chinese_zodiac}띠 — "
+        f"{breakdown.zodiac_label}"
+        f" ({breakdown.zodiac_delta:+.1f})"
+    )
+    element_detail = (
+        f"{home_pitcher.zodiac_sign}({home_pitcher.zodiac_element}) vs "
+        f"{away_pitcher.zodiac_sign}({away_pitcher.zodiac_element}) — "
+        f"{breakdown.element_label} ({breakdown.element_delta:+.1f})"
+    )
     chemistry = ChemistryDetail(
-        zodiac_detail=None,
-        element_detail=None,
+        zodiac_detail=zodiac_detail,
+        element_detail=element_detail,
         chemistry_score=matchup.chemistry_score,
-        chemistry_comment=None,
+        chemistry_comment=matchup.chemistry_comment,
     )
 
     return MatchupDetail(

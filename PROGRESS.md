@@ -48,15 +48,36 @@
 
 ---
 
-## 현재 상태 (세션 4 기준, 2026-04-13)
+## 현재 상태 (세션 5 기준, 2026-04-13)
 
 Phase 4 라우터 + Phase 5 프론트엔드 구조 완성.  
-`npm run build` clean, 4개 라우트 컴파일 확인.  
-**코드 리뷰어가 BLOCK 판정한 미수정 이슈들이 다음 세션의 첫 작업.**
+세션 5에서 코드 리뷰어 BLOCK 이슈 전부 해소 (커밋 `726a3ea`, `e31c3c1`, `f4fba33`) →
+`main` 브랜치로 PR #1 머지.
+
+세션 6(= 현재 브랜치 `claude/mobile-test-pitcher-page-dMT0l`) 작업 완료:
+- **E.** `npm run dev` 기동 + 3개 라우트 smoke 테스트 (`/`, `/pitcher/[1-3]`, `/history`)
+  → 모두 200. `NEXT_PUBLIC_USE_MOCK=true` 로 FE 단독 검증.
+- **D-7.** `/pitcher/[id]` 페이지가 `PitcherDetail` (face_scores / today_fortune 분리 구조)를 소비하도록 정렬.
+  `PitcherProfile` 레거시 타입 제거, `api.ts` `getPitcher` 반환 타입 교체, mock 분기는
+  `splitPitcherScoresForMock()` 헬퍼로 `PitcherScores` → `(FaceScoreDetail, FortuneScoreDetail)` 분해.
+- **F-1.** `Matchup` 모델에 `chemistry_comment`, `game_time`, `series_label` 컬럼 추가.
+- **F-2.** `scheduler.analyze_and_score_matchups` 가 DailySchedule 의 `game_time` 복사 +
+  `_derive_series_label()` 로 더블헤더/주말 홈경기 태그 자동 생성 + `_build_chemistry_comment()` 로
+  `ChemistryBreakdown` 기반 규칙 코멘트 생성.
+- `/api/matchup/{id}` 가 `ChemistryDetail.zodiac_detail / element_detail` 을
+  `chemistry_for_pitchers()` 호출로 라이브 계산, `chemistry_comment` 는 DB 값 사용.
+- 타입 체크 + `npm run build` + `python -c "from app.main import app"` 전부 clean.
+
+⚠️ **스키마 변경:** 기존 dev SQLite DB 가 이미 존재한다면
+`rm data/facemetrics.db && python scripts/init_db.py && python scripts/seed_pitchers.py`
+로 재생성 필요 (Alembic 미도입, `create_all` 은 기존 테이블에 컬럼 추가 안 함).
 
 ---
 
-## [WPI] 세션 5 인계 (2026-04-13)
+## [ARCHIVED] 세션 5 인계 (2026-04-13)
+
+✅ 세션 5 에서 모두 해소 → PR #1 로 `main` 머지 완료 (`da1b8cd`).
+아래 블록은 히스토리 보존용 — 다음 아카이브 패스에서 `ARCHIVE.md` 로 이동 예정.
 
 ### 브랜치
 `claude/phase-5-no-api-5jocG`
@@ -149,15 +170,28 @@ git push
 
 ### D. Phase 5 프론트엔드 잔여
 
-- [ ] **D-1 (CRITICAL)** api.ts `|| true` 제거 (C1)
-- [ ] **D-2 (CRITICAL)** page.tsx 타입 캐스팅 수정 + expand 시 matchup detail fetch (C2)
-- [ ] **D-3** 하드코딩 날짜 전부 동적으로 교체 (C3, I1, I6)
-- [ ] **D-4** 인라인 스타일 → Tailwind 토큰 (I2)
-- [ ] **D-5** api.ts getHistory() `.matchups` 언래핑 (I5)
-- [ ] **D-6** 백엔드 MatchupSummary에 game_time/series_label 추가 (C4)
-- [ ] **D-7** PitcherProfile 타입 PitcherDetail과 정렬 (C5)
-- [ ] **D-8** 360px 모바일 뷰포트 실기동 테스트
+- [x] **D-1 (CRITICAL)** api.ts `|| true` 제거 (C1) — 세션 5
+- [x] **D-2 (CRITICAL)** page.tsx 타입 캐스팅 수정 + expand 시 matchup detail fetch (C2) — 세션 5
+- [x] **D-3** 하드코딩 날짜 전부 동적으로 교체 (C3, I1, I6) — 세션 5
+- [x] **D-4** 인라인 스타일 → Tailwind 토큰 (I2) — 세션 5
+- [x] **D-5** api.ts getHistory() `.matchups` 언래핑 (I5) — 세션 5
+- [x] **D-6** 백엔드 MatchupSummary에 game_time/series_label 추가 (C4) — 세션 5
+- [x] **D-7** PitcherProfile 타입 PitcherDetail과 정렬 (C5) — 세션 6 (2026-04-13, 현재 브랜치)
+- [x] **D-8** `npm run dev` smoke 테스트 (라우트 200 확인) — 세션 6
 - [ ] **D-9** Share card PNG 생성 (Phase 6)
+
+### E. 모바일 뷰포트 실기동 (후속)
+
+- [x] **E-1** `npm run dev` 로 3개 라우트 (`/`, `/pitcher/[1-3]`, `/history`) SSR 200 확인 — 세션 6
+- [ ] **E-2** 실 브라우저 360px 시각 QA — 헤드풀 환경에서만 가능. 현재 세션 범위 밖.
+
+### F. Matchup 모델 확장 (세션 6)
+
+- [x] **F-1** `matchups.chemistry_comment`, `game_time`, `series_label` 컬럼 추가
+- [x] **F-2** `analyze_and_score_matchups` 가 세 필드 모두 실제 값으로 기록
+      (game_time ← DailySchedule, series_label ← `_derive_series_label()`,
+      chemistry_comment ← `_build_chemistry_comment()`)
+- [x] **F-3** `/api/today` / `/api/history` / `/api/matchup/{id}` 응답에 필드 노출
 
 ---
 

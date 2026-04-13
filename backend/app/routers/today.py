@@ -35,6 +35,8 @@ def _matchup_summary(matchup: Matchup, home: Pitcher, away: Pitcher) -> MatchupS
         home_team=matchup.home_team,
         away_team=matchup.away_team,
         stadium=matchup.stadium,
+        game_time=matchup.game_time.strftime("%H:%M") if matchup.game_time else None,
+        series_label=matchup.series_label,
         home_pitcher=pitcher_summary(home),
         away_pitcher=pitcher_summary(away),
         home_total=matchup.home_total,

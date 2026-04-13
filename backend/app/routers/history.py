@@ -76,6 +76,8 @@ async def get_history(
                 home_team=m.home_team,
                 away_team=m.away_team,
                 stadium=m.stadium,
+                game_time=m.game_time.strftime("%H:%M") if m.game_time else None,
+                series_label=m.series_label,
                 home_pitcher=pitcher_summary(home),
                 away_pitcher=pitcher_summary(away),
                 home_total=m.home_total,

@@ -111,13 +111,6 @@ export interface AccuracyStats {
   last_updated?: string;
 }
 
-export interface PitcherProfile extends PitcherSummary {
-  birth_date: string | null;
-  blood_type: string | null;
-  hand: string | null;
-  scores: PitcherScores | null;
-}
-
 export interface HistoryMatchup extends MatchupSummary {
   game_date: string;
   actual_winner: string | null;

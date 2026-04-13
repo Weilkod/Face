@@ -24,13 +24,13 @@ take down the scheduler or the FastAPI app.
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
-from typing import Optional
+from datetime import date, datetime, time
+from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -38,6 +38,7 @@ from app.db import SessionLocal
 from app.models.daily_schedule import DailySchedule
 from app.models.matchup import Matchup
 from app.models.pitcher import Pitcher
+from app.services.chemistry_calculator import ChemistryBreakdown
 from app.services.crawler import (
     fetch_today_schedule,
     match_pitcher_name,
@@ -121,17 +122,98 @@ async def _get_pitcher(session: AsyncSession, pitcher_id: int) -> Optional[Pitch
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
+def _build_chemistry_comment(
+    home_pitcher: Pitcher,
+    away_pitcher: Pitcher,
+    breakdown: ChemistryBreakdown,
+) -> str:
+    """Rule-based one-liner summarizing the 상성 breakdown.
+
+    No AI — just the labels and deltas from ChemistryBreakdown. Stable per
+    `(home_zodiac, away_zodiac, home_element, away_element)`.
+    """
+    zodiac_phrase = {
+        "삼합": f"{home_pitcher.chinese_zodiac}-{away_pitcher.chinese_zodiac} 삼합(三合)이 기운을 북돋운다",
+        "육합": f"{home_pitcher.chinese_zodiac}-{away_pitcher.chinese_zodiac} 육합(六合) 궁합",
+        "원진": f"{home_pitcher.chinese_zodiac}-{away_pitcher.chinese_zodiac} 원진(怨嗔) — 미묘한 거슬림",
+        "충": f"{home_pitcher.chinese_zodiac}-{away_pitcher.chinese_zodiac} 충(沖) — 정면충돌",
+        "중립": f"{home_pitcher.chinese_zodiac}-{away_pitcher.chinese_zodiac} 무색무취의 중립",
+        "자기(동일 띠)": f"같은 {home_pitcher.chinese_zodiac}띠 동기 대결",
+    }.get(breakdown.zodiac_label, f"{home_pitcher.chinese_zodiac}-{away_pitcher.chinese_zodiac}")
+
+    element_phrase = {
+        "동질": f"{home_pitcher.zodiac_element} 원소 동질로 흐름이 맞물린다",
+        "상생": f"{home_pitcher.zodiac_element}-{away_pitcher.zodiac_element} 상생(相生) 에너지",
+        "상극": f"{home_pitcher.zodiac_element}-{away_pitcher.zodiac_element} 상극(相克) 충돌",
+        "중립": f"원소는 {home_pitcher.zodiac_element}·{away_pitcher.zodiac_element}로 무관",
+    }.get(breakdown.element_label, "")
+
+    final = breakdown.final
+    if final >= 3.5:
+        verdict = "오늘은 상성운이 매우 밝다"
+    elif final >= 2.5:
+        verdict = "상성운이 온기를 더한다"
+    elif final >= 1.5:
+        verdict = "상성은 한 박자 묵직하게 흐른다"
+    else:
+        verdict = "상성운은 거칠고 날 선 날"
+
+    return f"{zodiac_phrase}. {element_phrase}. {verdict}."
+
+
+def _derive_series_label(
+    gd: date,
+    home_team: str,
+    away_team: str,
+    schedule_rows_for_date: list[Any],
+) -> Optional[str]:
+    """Derive a cosmetic series tag from the same-date schedule set.
+
+    Rules (cheap + deterministic):
+      - If the SAME (home_team, away_team) pair appears ≥ 2x on this date
+        → "더블헤더"
+      - If the home team plays ≥ 2 games on this date (regardless of opp)
+        → "더블헤더"
+      - Weekend home games → "주말 홈경기" (Sat/Sun = 5,6)
+      - Otherwise → None
+    """
+    same_pair = sum(
+        1
+        for r in schedule_rows_for_date
+        if r.home_team == home_team and r.away_team == away_team
+    )
+    if same_pair >= 2:
+        return "더블헤더"
+
+    home_team_games = sum(
+        1
+        for r in schedule_rows_for_date
+        if r.home_team == home_team or r.away_team == home_team
+    )
+    if home_team_games >= 2:
+        return "더블헤더"
+
+    # weekday(): Mon=0 … Sun=6
+    if gd.weekday() >= 5:
+        return "주말 홈경기"
+
+    return None
+
+
 async def _upsert_matchup_row(
     session: AsyncSession,
     gd: date,
     home_team: str,
     away_team: str,
     stadium: Optional[str],
+    game_time: Optional[time],
+    series_label: Optional[str],
     home_pitcher_id: int,
     away_pitcher_id: int,
     home_total: float,
     away_total: float,
     chemistry: float,
+    chemistry_comment: Optional[str],
     predicted_winner: str,
     winner_comment: str,
 ) -> str:
@@ -150,9 +232,12 @@ async def _upsert_matchup_row(
                 home_team=home_team,
                 away_team=away_team,
                 stadium=stadium,
+                game_time=game_time,
+                series_label=series_label,
                 home_pitcher_id=home_pitcher_id,
                 away_pitcher_id=away_pitcher_id,
                 chemistry_score=chemistry,
+                chemistry_comment=chemistry_comment,
                 home_total=int(round(home_total)),
                 away_total=int(round(away_total)),
                 predicted_winner=predicted_winner,
@@ -165,7 +250,10 @@ async def _upsert_matchup_row(
     existing.home_team = home_team
     existing.away_team = away_team
     existing.stadium = stadium
+    existing.game_time = game_time
+    existing.series_label = series_label
     existing.chemistry_score = chemistry
+    existing.chemistry_comment = chemistry_comment
     existing.home_total = int(round(home_total))
     existing.away_total = int(round(away_total))
     existing.predicted_winner = predicted_winner
@@ -196,17 +284,21 @@ async def analyze_and_score_matchups(game_date: Optional[date] = None) -> dict[s
             DailySchedule.home_team,
             DailySchedule.away_team,
             DailySchedule.stadium,
+            DailySchedule.game_time,
             DailySchedule.home_starter,
             DailySchedule.away_starter,
         ).where(DailySchedule.game_date == gd)
-        schedule_rows = (await session.execute(stmt)).all()
+        schedule_rows = list((await session.execute(stmt)).all())
 
         for row in schedule_rows:
             home_team = row.home_team
             away_team = row.away_team
             stadium = row.stadium
+            game_time = row.game_time
             home_starter = row.home_starter
             away_starter = row.away_starter
+
+            series_label = _derive_series_label(gd, home_team, away_team, schedule_rows)
 
             if not home_starter or not away_starter:
                 logger.info(
@@ -245,17 +337,23 @@ async def analyze_and_score_matchups(game_date: Optional[date] = None) -> dict[s
                     opponent_team_for_away=home_team,
                     stadium=stadium or "",
                 )
+                chem_comment = _build_chemistry_comment(
+                    home_pitcher, away_pitcher, score.chemistry
+                )
                 action = await _upsert_matchup_row(
                     session,
                     gd=gd,
                     home_team=home_team,
                     away_team=away_team,
                     stadium=stadium,
+                    game_time=game_time,
+                    series_label=series_label,
                     home_pitcher_id=home_pid,
                     away_pitcher_id=away_pid,
                     home_total=score.home.total,
                     away_total=score.away.total,
                     chemistry=score.chemistry.final,
+                    chemistry_comment=chem_comment,
                     predicted_winner=score.predicted_winner,
                     winner_comment=score.winner_comment,
                 )

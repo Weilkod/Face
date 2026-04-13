@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getPitcher } from "@/lib/api";
-import type { PitcherProfile } from "@/types";
+import type { PitcherDetail } from "@/types";
 import RadarChart from "@/components/RadarChart";
 import Footer from "@/components/Footer";
 import { AxisScoreBar } from "@/components/ScoreBar";
@@ -17,9 +17,56 @@ const AXIS_META = [
   { key: "destiny" as const, icon: "✨", label: "운명력", labelEn: "Destiny" },
 ] as const;
 
+type AxisKey = (typeof AXIS_META)[number]["key"];
+
+interface AxisRow {
+  key: AxisKey;
+  face: number;
+  fortune: number;
+  total: number;
+  face_detail: string | null;
+  fortune_reading: string | null;
+}
+
+/**
+ * Combine face_scores + today_fortune into per-axis rows for rendering.
+ *
+ * The backend returns face_scores (season-fixed) and today_fortune (per-game)
+ * as two independent nullable blocks — see CLAUDE.md §2. We merge them here
+ * into the 5-axis structure the UI needs, leaving missing values at 0.
+ */
+function buildAxisRows(pitcher: PitcherDetail): AxisRow[] {
+  const face = pitcher.face_scores;
+  const fortune = pitcher.today_fortune;
+  return AXIS_META.map(({ key }) => {
+    const f = face ? face[key] : 0;
+    const r = fortune ? fortune[key] : 0;
+    const faceDetailKey = `${key}_detail` as
+      | "command_detail"
+      | "stuff_detail"
+      | "composure_detail"
+      | "dominance_detail"
+      | "destiny_detail";
+    const fortuneReadingKey = `${key}_reading` as
+      | "command_reading"
+      | "stuff_reading"
+      | "composure_reading"
+      | "dominance_reading"
+      | "destiny_reading";
+    return {
+      key,
+      face: f,
+      fortune: r,
+      total: f + r,
+      face_detail: face ? face[faceDetailKey] : null,
+      fortune_reading: fortune ? fortune[fortuneReadingKey] : null,
+    };
+  });
+}
+
 export default async function PitcherPage({ params }: Props) {
   const pitcherId = parseInt(params.id, 10);
-  let pitcher: PitcherProfile | null = null;
+  let pitcher: PitcherDetail | null = null;
   let error: string | null = null;
 
   try {
@@ -27,6 +74,12 @@ export default async function PitcherPage({ params }: Props) {
   } catch (e) {
     error = e instanceof Error ? e.message : "투수 정보를 불러올 수 없습니다.";
   }
+
+  const axisRows = pitcher ? buildAxisRows(pitcher) : [];
+  const totalScore = axisRows.reduce((sum, a) => sum + a.total, 0);
+  const hasAnyScore =
+    pitcher?.face_scores != null || pitcher?.today_fortune != null;
+  const todayFortune = pitcher?.today_fortune ?? null;
 
   return (
     <main className="min-h-screen antialiased bg-bg">
@@ -58,15 +111,15 @@ export default async function PitcherPage({ params }: Props) {
           <div className="space-y-6">
             {/* Profile card */}
             <div className="card-soft rounded-2xl bg-white p-6 ring-1 ring-black/5 sm:p-8">
-              <div className="flex items-start gap-5">
-                <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-2xl bg-coral-light">
-                  <span className="text-3xl font-bold text-coral">
+              <div className="flex items-start gap-4 sm:gap-5">
+                <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-coral-light sm:h-20 sm:w-20">
+                  <span className="text-2xl font-bold text-coral sm:text-3xl">
                     {pitcher.name.charAt(0)}
                   </span>
                 </div>
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <div className="text-xs text-ink-faint">{pitcher.team}</div>
-                  <h1 className="mt-0.5 text-3xl font-bold text-ink">
+                  <h1 className="mt-0.5 break-words text-2xl font-bold text-ink sm:text-3xl">
                     {pitcher.name}
                   </h1>
                   {pitcher.name_en && (
@@ -89,37 +142,32 @@ export default async function PitcherPage({ params }: Props) {
                         {pitcher.birth_date}
                       </span>
                     )}
-                    {pitcher.hand && (
-                      <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                        {pitcher.hand}
-                      </span>
-                    )}
                   </div>
                 </div>
               </div>
             </div>
 
-            {pitcher.scores ? (
+            {hasAnyScore ? (
               <>
                 {/* Total score */}
                 <div className="card-soft rounded-2xl bg-white p-6 ring-1 ring-black/5">
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
                       <p className="text-xs font-medium text-coral">
                         오늘의 FACEMETRICS 총점
                       </p>
-                      <div className="mt-1 text-5xl font-bold text-ink">
-                        {pitcher.scores.total}
+                      <div className="mt-1 text-4xl font-bold text-ink sm:text-5xl">
+                        {totalScore}
                         <span className="ml-1 text-base font-normal text-ink-faint">
                           / 100
                         </span>
                       </div>
                     </div>
-                    {pitcher.scores.lucky_inning && (
+                    {todayFortune?.lucky_inning != null && (
                       <div className="text-center">
                         <p className="text-xs text-ink-faint">럭키 이닝</p>
                         <div className="mt-1 text-3xl font-bold text-coral">
-                          {pitcher.scores.lucky_inning}
+                          {todayFortune.lucky_inning}
                           <span className="text-base font-normal text-ink-faint">
                             회
                           </span>
@@ -127,9 +175,9 @@ export default async function PitcherPage({ params }: Props) {
                       </div>
                     )}
                   </div>
-                  {pitcher.scores.daily_summary && (
+                  {todayFortune?.daily_summary && (
                     <p className="mt-4 rounded-lg bg-coral-light px-4 py-3 text-sm italic text-ink-muted">
-                      &ldquo;{pitcher.scores.daily_summary}&rdquo;
+                      &ldquo;{todayFortune.daily_summary}&rdquo;
                     </p>
                   )}
                 </div>
@@ -145,17 +193,11 @@ export default async function PitcherPage({ params }: Props) {
                   </div>
                   <div className="mx-auto max-w-xs">
                     <RadarChart
-                      homeScores={[
-                        pitcher.scores.command.total,
-                        pitcher.scores.stuff.total,
-                        pitcher.scores.composure.total,
-                        pitcher.scores.dominance.total,
-                        pitcher.scores.destiny.total,
-                      ]}
+                      homeScores={axisRows.map((a) => a.total)}
                       awayScores={[10, 10, 10, 10, 10]}
                       homeName={pitcher.name}
                       awayName="평균"
-                      homeTotal={pitcher.scores.total}
+                      homeTotal={totalScore}
                       awayTotal={50}
                       animated={false}
                     />
@@ -168,43 +210,43 @@ export default async function PitcherPage({ params }: Props) {
                     관상 · 운세 상세 분석
                   </h2>
                   <div className="space-y-6">
-                    {AXIS_META.map((axis) => {
-                      const score = pitcher.scores![axis.key];
+                    {axisRows.map((row) => {
+                      const meta = AXIS_META.find((m) => m.key === row.key)!;
                       return (
-                        <div key={axis.key}>
+                        <div key={row.key}>
                           <div className="mb-3 flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <span>{axis.icon}</span>
-                              <span className="text-sm font-semibold text-ink">
-                                {axis.label} · {axis.labelEn}
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span>{meta.icon}</span>
+                              <span className="truncate text-sm font-semibold text-ink">
+                                {meta.label} · {meta.labelEn}
                               </span>
                             </div>
-                            <span className="text-sm font-bold text-coral">
-                              {score.total} / 20
+                            <span className="flex-shrink-0 text-sm font-bold text-coral">
+                              {row.total} / 20
                             </span>
                           </div>
                           <AxisScoreBar
-                            homeScore={score.total}
-                            awayScore={20 - score.total}
+                            homeScore={row.total}
+                            awayScore={20 - row.total}
                           />
                           <div className="mt-3 grid gap-3 text-[11px] leading-relaxed sm:grid-cols-2">
-                            {score.face_detail && (
+                            {row.face_detail && (
                               <div className="rounded-lg bg-coral-light p-3">
-                                <p className="font-semibold text-coral mb-1">
-                                  관상 {score.face}점
+                                <p className="mb-1 font-semibold text-coral">
+                                  관상 {row.face}점
                                 </p>
                                 <p className="text-ink-muted">
-                                  {score.face_detail}
+                                  {row.face_detail}
                                 </p>
                               </div>
                             )}
-                            {score.fortune_reading && (
+                            {row.fortune_reading && (
                               <div className="rounded-lg bg-mint-light p-3">
-                                <p className="font-semibold text-mint-dark mb-1">
-                                  오늘 운세 {score.fortune}점
+                                <p className="mb-1 font-semibold text-mint-dark">
+                                  오늘 운세 {row.fortune}점
                                 </p>
                                 <p className="text-ink-muted">
-                                  {score.fortune_reading}
+                                  {row.fortune_reading}
                                 </p>
                               </div>
                             )}

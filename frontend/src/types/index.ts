@@ -40,6 +40,8 @@ export interface MatchupSummary {
   home_team: string;
   away_team: string;
   stadium: string | null;
+  game_time: string | null;
+  series_label: string | null;
   home_pitcher: PitcherSummary;
   away_pitcher: PitcherSummary;
   home_total: number;
@@ -105,7 +107,15 @@ export interface AccuracyStats {
   total_predictions: number;
   correct_predictions: number;
   accuracy_rate: number;
-  recent_7_days: PeriodAccuracy;
+  recent_7_days?: PeriodAccuracy;
+  last_updated?: string;
+}
+
+export interface PitcherProfile extends PitcherSummary {
+  birth_date: string | null;
+  blood_type: string | null;
+  hand: string | null;
+  scores: PitcherScores | null;
 }
 
 export interface HistoryMatchup extends MatchupSummary {

@@ -6,6 +6,7 @@ Usage:
     python scripts/crawl_today.py
     python scripts/crawl_today.py --date 2026-04-13
     python scripts/crawl_today.py --date 2026-04-13 --loglevel DEBUG
+    python scripts/crawl_today.py --write   # persist to daily_schedules
 
 What it does
 ------------
@@ -13,9 +14,10 @@ What it does
 2. Calls fetch_today_schedule(game_date).
 3. For each ScheduleEntry, calls match_pitcher_name() against the live DB.
 4. Prints a formatted summary table.
+5. If --write is passed, calls upsert_schedule() to persist the crawled rows
+   into the daily_schedules table and prints the insert/update counts.
 
-This pass is READ-ONLY — it does NOT write to daily_schedules.
-DB-write + scheduler wiring is the next Phase 3 sub-task.
+Without --write this pass is READ-ONLY — nothing is written to the DB.
 """
 
 from __future__ import annotations
@@ -42,7 +44,11 @@ if str(BACKEND_DIR) not in sys.path:
 # Imports (after path fix)
 # ---------------------------------------------------------------------------
 from app.db import SessionLocal                            # noqa: E402
-from app.services.crawler import fetch_today_schedule, match_pitcher_name  # noqa: E402
+from app.services.crawler import (                         # noqa: E402
+    fetch_today_schedule,
+    match_pitcher_name,
+    upsert_schedule,
+)
 from app.schemas.crawler import ScheduleEntry             # noqa: E402
 
 KST = ZoneInfo("Asia/Seoul")
@@ -63,6 +69,12 @@ def _parse_args() -> argparse.Namespace:
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Log level (default: INFO)",
     )
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Persist crawled rows to daily_schedules via upsert_schedule "
+             "(default: read-only dry-run).",
+    )
     return parser.parse_args()
 
 
@@ -77,8 +89,11 @@ def _row(label: str, value: object) -> None:
     print(f"  {label:<28} {value}")
 
 
-async def _run(game_date: date) -> None:
-    _header(f"FACEMETRICS crawler - {game_date.isoformat()} (KST)")
+async def _run(game_date: date, *, write: bool = False) -> None:
+    _header(
+        f"FACEMETRICS crawler - {game_date.isoformat()} (KST)"
+        f"{'  [--write]' if write else '  [dry-run]'}"
+    )
 
     # -----------------------------------------------------------------------
     # Step 1: Fetch schedule
@@ -203,12 +218,26 @@ async def _run(game_date: date) -> None:
             "  The scheduler sub-task will wire up the retry loop."
         )
 
+    # -----------------------------------------------------------------------
+    # Step 6 (--write only): persist to daily_schedules
+    # -----------------------------------------------------------------------
+    if write:
+        _header("WRITING TO daily_schedules")
+        async with SessionLocal() as session:
+            counts = await upsert_schedule(session, entries)
+        print(
+            f"  inserted={counts.get('inserted', 0)}  "
+            f"updated={counts.get('updated', 0)}  "
+            f"skipped={counts.get('skipped', 0)}"
+        )
+
     _header("DONE")
     print(
         f"  entries={len(entries)}  "
         f"resolved={sum(1 for e in entries if e.home_pitcher_id and e.away_pitcher_id)}  "
         f"tbd_starters={len(tbd_games)}  "
-        f"unmatched_names={len(unknowns)}"
+        f"unmatched_names={len(unknowns)}  "
+        f"mode={'write' if write else 'dry-run'}"
     )
 
 
@@ -229,7 +258,7 @@ def main() -> None:
     else:
         game_date = datetime.now(KST).date()
 
-    asyncio.run(_run(game_date))
+    asyncio.run(_run(game_date, write=args.write))
 
 
 if __name__ == "__main__":

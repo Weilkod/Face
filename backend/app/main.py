@@ -1,16 +1,27 @@
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.scheduler import build_scheduler
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    yield
+    scheduler = build_scheduler()
+    scheduler.start()
+    logger.info("[main] APScheduler started with %d job(s)", len(scheduler.get_jobs()))
+    try:
+        yield
+    finally:
+        scheduler.shutdown(wait=False)
+        logger.info("[main] APScheduler stopped")
 
 
 def create_app() -> FastAPI:

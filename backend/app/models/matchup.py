@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, false, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -29,6 +29,13 @@ class Matchup(Base):
     predicted_winner: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
     winner_comment: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     actual_winner: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+
+    # Set True by the 11:00 KST publish job once predictions are final and
+    # safe to surface to users. Written rows are invisible to /api/today until
+    # this flag flips.
+    is_published: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()

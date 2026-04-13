@@ -45,6 +45,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zoneinfo import ZoneInfo
 
 from app.config import PROJECT_ROOT
+from app.models.daily_schedule import DailySchedule
 from app.models.pitcher import Pitcher
 from app.schemas.crawler import ScheduleEntry
 
@@ -806,3 +807,145 @@ async def fetch_today_schedule(game_date: date) -> list[ScheduleEntry]:
         game_date,
     )
     return []
+
+
+# ---------------------------------------------------------------------------
+# DB write — upsert daily_schedules
+# ---------------------------------------------------------------------------
+
+
+async def upsert_schedule(
+    session: AsyncSession,
+    entries: list[ScheduleEntry],
+) -> dict[str, int]:
+    """
+    Upsert crawled ScheduleEntry rows into daily_schedules.
+
+    Natural key: (game_date, home_team, away_team).
+
+    Null-safety on retries: once a starter name is stored, a later retry that
+    comes back with None will NOT blank it out. This lets the 09:00 / 10:00
+    jobs re-crawl a TBD matchup without losing confirmed starters from a
+    partially-populated earlier run.
+
+    pitcher_id resolution is NOT this function's job — starters go in as raw
+    Korean names. The 10:30 scoring job is responsible for resolving them to
+    pitcher_ids via match_pitcher_name and writing the matchups row.
+
+    Commits once at the end. Caller should not wrap this in an outer
+    transaction — use a fresh session per run.
+
+    Returns counts: {"inserted": n, "updated": n, "skipped": n}.
+    skipped covers entries whose fields were identical to the DB row.
+    """
+    counts = {"inserted": 0, "updated": 0, "skipped": 0}
+
+    for entry in entries:
+        stmt = select(DailySchedule).where(
+            DailySchedule.game_date == entry.game_date,
+            DailySchedule.home_team == entry.home_team,
+            DailySchedule.away_team == entry.away_team,
+        )
+        existing = (await session.execute(stmt)).scalar_one_or_none()
+
+        if existing is None:
+            session.add(
+                DailySchedule(
+                    game_date=entry.game_date,
+                    home_team=entry.home_team,
+                    away_team=entry.away_team,
+                    stadium=entry.stadium,
+                    game_time=entry.game_time,
+                    home_starter=entry.home_starter_name,
+                    away_starter=entry.away_starter_name,
+                    source_url=entry.source_url,
+                )
+            )
+            counts["inserted"] += 1
+            logger.info(
+                "[crawler:upsert] INSERT %s %s@%s home=%s away=%s",
+                entry.game_date, entry.away_team, entry.home_team,
+                entry.home_starter_name or "(TBD)",
+                entry.away_starter_name or "(TBD)",
+            )
+            continue
+
+        # --- Update path -----------------------------------------------------
+        changed = False
+
+        # stadium / game_time: overwrite if crawler has a value
+        if entry.stadium and existing.stadium != entry.stadium:
+            existing.stadium = entry.stadium
+            changed = True
+        if entry.game_time and existing.game_time != entry.game_time:
+            existing.game_time = entry.game_time
+            changed = True
+
+        # Starters: only fill blanks. Never overwrite confirmed with None.
+        # A confirmed starter that disagrees with a new crawl is a legitimate
+        # mismatch (late scratch, source flip-flop, wrong name in one source)
+        # — keep the DB value but queue for human review per CLAUDE.md §5.
+        if entry.home_starter_name and existing.home_starter != entry.home_starter_name:
+            if existing.home_starter is None:
+                existing.home_starter = entry.home_starter_name
+                changed = True
+            else:
+                logger.warning(
+                    "[crawler:upsert] starter mismatch for %s %s (home): db=%s crawl=%s — keeping db",
+                    entry.game_date, entry.home_team,
+                    existing.home_starter, entry.home_starter_name,
+                )
+                _append_review({
+                    "date": entry.game_date.isoformat(),
+                    "team": entry.home_team,
+                    "crawled_name": entry.home_starter_name,
+                    "db_name": existing.home_starter,
+                    "side": "home",
+                    "reason": "upsert mismatch: confirmed starter disagrees with new crawl",
+                    "source": entry.source,
+                    "source_url": entry.source_url,
+                    "queued_at": datetime.now(KST).isoformat(),
+                })
+        if entry.away_starter_name and existing.away_starter != entry.away_starter_name:
+            if existing.away_starter is None:
+                existing.away_starter = entry.away_starter_name
+                changed = True
+            else:
+                logger.warning(
+                    "[crawler:upsert] starter mismatch for %s %s (away): db=%s crawl=%s — keeping db",
+                    entry.game_date, entry.away_team,
+                    existing.away_starter, entry.away_starter_name,
+                )
+                _append_review({
+                    "date": entry.game_date.isoformat(),
+                    "team": entry.away_team,
+                    "crawled_name": entry.away_starter_name,
+                    "db_name": existing.away_starter,
+                    "side": "away",
+                    "reason": "upsert mismatch: confirmed starter disagrees with new crawl",
+                    "source": entry.source,
+                    "source_url": entry.source_url,
+                    "queued_at": datetime.now(KST).isoformat(),
+                })
+
+        if entry.source_url and existing.source_url != entry.source_url:
+            existing.source_url = entry.source_url
+            changed = True
+
+        if changed:
+            counts["updated"] += 1
+            logger.info(
+                "[crawler:upsert] UPDATE %s %s@%s home=%s away=%s",
+                entry.game_date, entry.away_team, entry.home_team,
+                existing.home_starter or "(TBD)",
+                existing.away_starter or "(TBD)",
+            )
+        else:
+            counts["skipped"] += 1
+
+    await session.commit()
+    logger.info(
+        "[crawler:upsert] done: inserted=%d updated=%d skipped=%d",
+        counts["inserted"], counts["updated"], counts["skipped"],
+    )
+    return counts

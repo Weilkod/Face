@@ -4,7 +4,7 @@
 각 항목은 **완료일 / 생성·수정 파일 / 검증 방법 / 새 세션을 위한 메모** 형식.
 
 - **Spec source of truth:** `README.md` + `CLAUDE.md`
-- **현재 단계:** Phase 1 ✅ → Phase 2 ✅ → Phase 3 sub-task 1 (크롤러) ✅ → 다음은 Phase 3 sub-task 2 (DB write + APScheduler)
+- **현재 단계:** Phase 1 ✅ → Phase 2 ✅ → Phase 3 sub-task 1 (크롤러) ✅ → Phase 3 sub-task 2 (DB write + Scheduler 글루) ✅ → 다음은 **sub-task 2 carry-over** (소스 품질 + Claude 캐시 미스 실검증)
 - **DB URL (dev):** `sqlite+aiosqlite:///data/facemetrics.db` (repo root 기준)
 - **자동화:** Stop hook (`.claude/hooks/code-reviewer-gate.sh`) 등록 — 응답이 끝날 때 untracked/modified 코드(.py/.ts/.tsx/.js/.jsx) 해시가 바뀌면 자동으로 code-reviewer 서브에이전트 호출 강제. 마커 `.claude/.last-reviewed-hash` 로 루프 방지.
 
@@ -403,38 +403,134 @@ data/
 
 ---
 
-## 🗺️ Phase 3 sub-task 2 — DB write + Scheduler (다음 세션 TODO)
+## ✅ Phase 3 sub-task 2 — DB write + Scheduler 글루 (완료: 2026-04-13)
 
-### 인수인계 (가장 먼저 읽을 것)
+Phase 3 의 목표: 일일 일정/선발 투수 크롤링 → 이름 매칭 → `score_matchup()` 파이프라인 → `matchups` DB write → 오전 11시 게시. sub-task 1 이 read-only 크롤러였고, 이번 sub-task 2 는 **DB write + APScheduler 글루** 까지. 실제 소스 HTML/XHR 은 여전히 placeholder (아래 carry-over 섹션 참조).
 
-1. **현재 tracked/untracked 상태:**
-   - `backend/app/services/crawler.py` 는 아직 git **untracked**. 2라운드 리뷰까지 마쳤지만 아직 커밋 X. sub-task 2 착수 전에 `git add backend/` + `git commit -m "feat: Phase 3 sub-task 1 crawler"` 권장.
-   - `.claude/settings.json`, `.claude/hooks/code-reviewer-gate.sh` 도 새로 추가됨 (Stop hook 자동화). 커밋 해서 팀 공유 가능. `.claude/.last-reviewed-hash` 는 이미 `.gitignore` 에 추가돼 제외됨.
+### 3.2-1. `upsert_schedule()` + null-safe 재시도 ✅
 
-2. **Stop hook 주의:** 이 세션부터 `응답 종료 시 code-reviewer 게이트`가 자동으로 발동. 코드를 수정한 뒤 stop 하려고 하면 훅이 1회 블록하며 code-reviewer 서브에이전트 호출을 강제한다. 루프 방지는 diff 해시 마커로 처리. 끄고 싶으면 `/hooks` 메뉴에서 disable.
+**수정:** `backend/app/services/crawler.py` (파일 하단에 함수 추가 + `DailySchedule` import)
 
-3. **Phase 2 캐시 미스 경로 실제 검증은 여전히 미완료.** `.env` 에 `ANTHROPIC_API_KEY` 넣고 Phase 3 sub-task 2 의 분석 잡이 처음 도는 순간에 (1) 첫 호출 Claude 히트, (2) 두 번째 호출 DB 캐시 히트 둘 다 로그 확인해야 함. sub-task 2 완료 정의에 포함.
+핵심 설계:
+- 자연 키: `(game_date, home_team, away_team)`.
+- **Null-safety (CLAUDE.md §5):** 한 번 확정된 선발은 이후 재크롤에서 `None` 으로 덮어써지지 않는다. 09:00 / 10:00 재시도 잡이 이 보장을 믿고 그대로 같은 entry 배치를 다시 밀어넣을 수 있음.
+- **Mismatch → 리뷰 큐 (CLAUDE.md §5):** DB 의 확정 이름과 새 크롤 이름이 **다른** 경우, DB 값은 보존하고 `_append_review({reason: "upsert mismatch: confirmed starter disagrees with new crawl", ...})` 로 리뷰 큐에 기록. 단순 경고 로그만 찍고 끝내지 않음 (1차 리뷰에서 잡힌 버그).
+- 반환: `{"inserted": n, "updated": n, "skipped": n}`. 끝에 한 번 commit.
 
-### sub-task 2 체크리스트
+### 3.2-2. `backend/app/scheduler.py` — 5개 KST 크론 잡 ✅
 
-- [ ] **`upsert_schedule(session, entries)` in `crawler.py`** — `list[ScheduleEntry]` 를 `daily_schedules` 테이블에 `(game_date, home_team, away_team)` 자연 키로 upsert. `home_starter` / `away_starter` 는 raw 이름 문자열 저장 (pitcher FK 는 `matchups` 테이블 몫).
-- [ ] **`backend/app/scheduler.py`** — `AsyncIOScheduler(timezone=ZoneInfo("Asia/Seoul"))` 로 다음 5개 잡:
-  - `08:00 KST` → `fetch_today_schedule` → `upsert_schedule`
-  - `09:00 KST` → 선발 미발표 (`home_starter IS NULL OR away_starter IS NULL`) 재시도
-  - `10:00 KST` → 최종 재시도. 이후는 TBD 슬롯 confirmed-unknown 마킹.
-  - `10:30 KST` → complete matchup 마다 `score_matchup()` 호출, `matchups` 쓰기. **여기서 Phase 2 캐시 미스 경로 처음 돌음.**
-  - `11:00 KST` → `matchups.is_published = True` 게시 플래그.
-- [ ] **Statiz → daum 교체.** `https://baseball.daum.net/schedule/team` 또는 `https://sports.daum.net/schedule/kbo` 중 robots.txt 통과하는 쪽으로. 기존 `_fetch_statiz` 는 함수 이름 유지하면서 내부 URL 만 교체하는 게 호출부 영향 최소.
-- [ ] **KBO JS-rendered 엔드포인트 탐색.** DevTools Network 탭에서 `S2i.MakeTable` 이 호출하는 실제 XHR 캡처 → 그걸 `_fetch_kbo` 의 새 타겟으로. 현재 HTML 셀렉터는 speculative placeholder.
-- [ ] **KT / KW 로테이션 투수 시드.** `data/pitchers_2026.json` 에 2팀 추가 → `scripts/seed_pitchers.py` 재실행. 아니면 크롤러가 미지 이름 만나면 리뷰 큐로 넣는 현재 경로로 점진 채움.
-- [ ] **`scripts/crawl_today.py --write` 플래그.** 현재는 read-only 드라이런. `--write` 주면 `upsert_schedule` 까지 태우는 모드 추가.
-- [ ] **리뷰 큐 concurrency.** `_append_review` JSON 파일 읽기-수정-쓰기 레이스 → fcntl advisory lock 붙이거나 `review_queue` DB 테이블로 승격.
-- [ ] **Alembic 도입 여부 결정.** 지금까지는 `Base.metadata.create_all` 만 쓰고 있는데, `daily_schedules` / `matchups` 에 새 컬럼 추가가 얼마나 자주 일어날지에 따라 결정. 현재 dev SQLite 상태에서는 `create_all` 로 충분.
+**신규 파일:** `backend/app/scheduler.py`
 
-### 실행 스모크 아이디어
+`AsyncIOScheduler(timezone=ZoneInfo("Asia/Seoul"))` 위에 `CronTrigger` 로 5개 잡 등록:
 
-- sub-task 2 완료 시 `python scripts/crawl_today.py --write` → DB 에 `daily_schedules` row 생성 → `python -c "await score_matchup(...)"` → `matchups` row 생성 → `/api/today` (Phase 4 에서 생길) 전에 직접 `SELECT * FROM matchups` 로 확인.
-- APScheduler 는 dev 환경에서 `trigger="interval", seconds=5` 같은 짧은 간격으로 전환해서 즉시 잡 실행 확인 가능. prod 전환 시 `CronTrigger(hour=..., minute=..., timezone=KST)` 로 교체.
+| 시각 (KST) | 잡 이름 | 역할 |
+|---|---|---|
+| 08:00 | `fetch_and_upsert_schedule` | 크롤러 → `upsert_schedule` |
+| 09:00 | `retry_missing_starters` | `home_starter IS NULL OR away_starter IS NULL` 있으면 재크롤 |
+| 10:00 | `retry_missing_starters` | 최종 재시도 (같은 함수) |
+| 10:30 | `analyze_and_score_matchups` | 양쪽 선발 확정된 게임마다 `score_matchup()` 호출 → `matchups` upsert → **per-game commit**. **여기서 Phase 2 Claude 캐시 미스 경로가 처음 돌 예정.** |
+| 11:00 | `publish_matchups` | `matchups.is_published = True` 플립 |
+
+구조 포인트 (리뷰 3패스 거친 뒤 확정):
+- **Per-game atomic 경계.** `try:` 안에 `score_matchup()` + `_upsert_matchup_row()` + `session.commit()` 이 한 덩어리로 묶여 있음. 실패하면 `session.rollback()` 한 뒤 다음 게임으로 continue — 이전에 커밋된 게임들은 살아남음.
+- **Core Row 튜플 SELECT.** `analyze_and_score_matchups` 는 `select(DailySchedule.home_team, ..., DailySchedule.away_starter)` 로 ORM 인스턴스 대신 plain `Row` 를 받아옴. 그래서 per-game rollback 이 identity map 을 만료시켜도 loop body 의 Korean starter 이름 / team code 가 expired ORM attribute 가 아니라서 `MissingGreenlet` 위험 없음 (2패스 리뷰 블로커).
+- **`_wrap()` helper.** 각 잡을 감싸서 예외가 scheduler / FastAPI 로 bubble 하지 않게 잡아 로그만 남김.
+- **`build_scheduler()` 팩토리** 만 export. `.start()` / `.shutdown()` 은 호출부 (FastAPI lifespan) 책임.
+
+### 3.2-3. FastAPI lifespan 에 scheduler wiring ✅
+
+**수정:** `backend/app/main.py`
+
+`@asynccontextmanager lifespan()` 에서 `build_scheduler()` 호출 → `scheduler.start()` → `yield` → `scheduler.shutdown(wait=False)`. `uvicorn app.main:app` 부팅하면 5개 잡이 자동 등록되고, 서버 끄면 깨끗이 정지.
+
+### 3.2-4. `Matchup.is_published` 컬럼 추가 ✅
+
+**수정:** `backend/app/models/matchup.py`
+
+```python
+is_published: Mapped[bool] = mapped_column(
+    Boolean, nullable=False, default=False, server_default=false()
+)
+```
+
+- `sqlalchemy.false()` expression 사용 (Postgres 에서 `FALSE` / SQLite 에서 `0` 으로 컴파일됨). 초기에 `server_default="0"` 문자열 리터럴로 썼다가 1차 리뷰에서 Postgres 호환성 문제 지적받고 교체.
+- dev SQLite DB 는 `matchups` 가 이미 존재했기 때문에 `create_all` 로는 컬럼 추가 안 됨 → 수동으로 `ALTER TABLE matchups ADD COLUMN is_published BOOLEAN NOT NULL DEFAULT 0` 실행했음. **prod Postgres 로 넘어갈 때는 Alembic migration 으로 재현 필요.**
+
+### 3.2-5. `scripts/crawl_today.py --write` 플래그 ✅
+
+**수정:** `scripts/crawl_today.py`
+
+`--write` 주면 step 6 에서 `upsert_schedule(session, entries)` 까지 태우고 `{inserted, updated, skipped}` 카운트 출력. 기본값은 read-only dry-run (이전 동작 유지). 헤더에 `[--write]` / `[dry-run]` 마커 표시.
+
+### 3.2-6. Phase 3 sub-task 2 파일 맵
+
+```
+backend/app/
+├── main.py                  (수정: lifespan → build_scheduler/start/shutdown)
+├── scheduler.py             (신규: 5개 KST 잡 + build_scheduler)
+├── models/matchup.py        (수정: is_published BOOLEAN default false())
+└── services/crawler.py      (수정: upsert_schedule + mismatch → _append_review)
+
+scripts/
+└── crawl_today.py           (수정: --write 플래그)
+```
+
+### 3.2-7. 검증 스모크 (이번 세션에서 통과)
+
+1. `python -c "from app.scheduler import build_scheduler; ..."` → 5 개 잡 (`fetch_schedule_08` / `retry_missing_09` / `retry_missing_10` / `analyze_score_1030` / `publish_11`) 등록 확인.
+2. `upsert_schedule` 4단계 테스트: 첫 insert 2 rows → 재실행 all-skipped → TBD 쪽 starter 채우기 updated=1 → confirmed 쪽에 `None` 밀기 skipped (null-safe 통과).
+3. 확정 이름 vs 다른 이름 mismatch → `data/crawler_review_queue.json` 에 reason `"upsert mismatch..."` entry 1건 추가됨 확인.
+4. `analyze_and_score_matchups` 를 빈 DB + seeded 2 rows (unknown starter) 두 경우에 돌려서 각각 `{skipped: 0}` / `{skipped: 2}` 반환, `MissingGreenlet` 없음.
+5. `scripts/crawl_today.py --date 2026-04-13 --write --loglevel WARNING` → 크롤러가 0 entries 반환 (여전히 소스 placeholder 한계) 하지만 CLI 가 깨끗하게 빠져나옴.
+
+### 3.2-8. 리뷰 히스토리 (code-reviewer 3 pass)
+
+- **1차:** 🔴 per-game `try/except` 범위 부족 (upsert 에러가 loop-level `session.commit()` 를 날림) / 🔴 upsert mismatch 가 리뷰 큐로 안 감 / 🟡 `server_default="0"` Postgres 호환성 → 전부 수정.
+- **2차:** 🔴 rollback 후 ORM row 가 identity map 에서 expire 되면서 다음 iteration 의 attribute access 가 async 컨텍스트에서 lazy-load 를 걸음 (`MissingGreenlet`) → Core Row 튜플로 전환하며 해결.
+- **3차:** 🟢 이번 diff 자체는 clean. 단, `score_matchup` 안쪽 `face_analyzer` / `fortune_generator` 가 **중간에 commit** 하기 때문에 Claude Vision 성공 + Claude Text 실패 시 고아 `face_scores` row 가 남는 문제는 **Phase 2 코드의 이슈**지 이번 diff 리그레션이 아님. Carry-over 로 기록.
+
+---
+
+## 🚨 Phase 3 sub-task 2 carry-over — 다음 세션 TODO
+
+Sub-task 2 의 **글루 코드**는 완성됐지만, 실제로 10:30 잡이 의미 있게 돌려면 다음 항목들이 채워져야 함. 우선순위 순서:
+
+### A. 데이터 소스 품질 (선순위 — 이거 없으면 10:30 잡이 skip 만 찍음)
+
+- [ ] **Statiz → Daum 교체.** `https://baseball.daum.net/schedule/team` 또는 `https://sports.daum.net/schedule/kbo` 중 robots.txt 통과하는 쪽으로. 기존 `_fetch_statiz` 는 함수 이름 유지하면서 내부 URL/selector 만 교체 (호출부 영향 최소).
+- [ ] **KBO JS-rendered 엔드포인트 탐색.** DevTools Network 탭에서 `S2i.MakeTable` 이 호출하는 실제 XHR 캡처 → `_fetch_kbo` 의 새 타겟으로. 현재 셀렉터는 speculative placeholder 상태.
+- [ ] **네이버 JSON API 재검증.** 2026-04-13 기준 `gameTotalCount: 0` 이었음. 시즌 개막 이후에는 games 배열이 채워질 것이라 가정 중 — 실제 게임 데이터 들어오는 날 한 번 더 돌려서 parser 맞는지 확인.
+- [ ] **KT / KW 로테이션 투수 시드.** `data/pitchers_2026.json` 에 2팀 추가 → `scripts/seed_pitchers.py` 재실행. 또는 크롤러가 미지 이름 만나면 리뷰 큐로 쌓는 현재 경로로 점진 채움 (둘 중 하나 선택).
+
+### B. Phase 2 AI 파이프 실검증 (소스 채워지면 자동으로 트리거됨)
+
+- [ ] **Claude 캐시 미스 경로 실검증.** `.env` 에 `ANTHROPIC_API_KEY` 넣은 상태로 10:30 잡 처음 돌 때:
+  - (1) face_analyzer 의 첫 호출이 Claude Vision 실제 타고 `face_scores` row 가 기록되는지
+  - (2) fortune_generator 의 첫 호출이 Claude Text 실제 타고 `fortune_scores` row 가 기록되는지
+  - (3) 동일 `(pitcher_id, date)` 로 같은 잡 재실행 시 두 번째부터 DB 캐시 히트 (Claude 호출 0 회) 되는지
+  - → 로그로 모두 확인. 완료 기준에 포함.
+- [ ] **고아 score row 문제 (3차 리뷰 flag).** `face_analyzer` / `fortune_generator` 가 `score_matchup` 내부에서 중간 commit 을 치므로, Vision 성공 + Text 실패 시나리오에서 `face_scores` 만 남고 `matchups` 는 안 써지는 고아 상태 발생 가능. **재시도 안전성은 OK** (다음 run 이 캐시 히트) 지만 자동 복구 경로 없음. `claude-ai-integrator` 에게 savepoint 도입 or 문서화 위임.
+- [ ] **Rollback 분기 유닛 테스트.** `analyze_and_score_matchups` 의 `except Exception` 분기는 현재 smoke 로 한 번도 안 탔음. Claude 를 mock 해서 중간 raise 시키고 "`matchups` 행 0개, `fortune_scores` 고아 1개, counts['failed']=1" 를 assert 하는 pytest 추가 권장 — 10:30 잡이 실제 API 와 처음 만나기 전에.
+
+### C. 운영 자잘한 개선 (blocker 아님)
+
+- [ ] **리뷰 큐 dedup.** `_append_review` 는 09:00 / 10:00 재시도 잡이 같은 `(date, team, side, crawled_name)` 조합을 여러 번 큐에 밀어넣음. `_append_review` 내부에서 동일 키 존재 확인 후 skip 하는 가드 추가.
+- [ ] **리뷰 큐 concurrency.** `_append_review` JSON 파일 읽기-수정-쓰기 레이스 → fcntl advisory lock 또는 `review_queue` DB 테이블로 승격. 현재는 단일 프로세스라 문제 없지만 scheduler 잡이 동시에 돌면 깨질 수 있음.
+- [ ] **`publish_matchups` 필터.** `select(Matchup).where(Matchup.game_date == gd, Matchup.is_published.is_(False))` 로 좁혀서 이미 published 된 row 재플립 방지 (harmless but wasteful).
+- [ ] **`_get_pitcher` N+1.** `analyze_and_score_matchups` 는 게임당 2번 pitcher select. ≤5 게임/일이라 무시 가능하지만 `where(Pitcher.pitcher_id.in_([...]))` 배치 로드가 더 깔끔.
+- [ ] **Alembic 도입 여부 결정.** 이번에 `is_published` 컬럼 추가 때 이미 수동 ALTER TABLE 썼음. prod Postgres 로 넘어가기 전에는 Alembic 환경 세팅 필요. 지금 dev SQLite 단계에서는 `create_all` + 수동 ALTER 로 버틸 수 있음.
+
+### D. 실행 스모크 아이디어
+
+- Scheduler 즉시 확인: dev 에서 `CronTrigger(hour=8,...)` 를 `IntervalTrigger(seconds=5)` 로 임시 교체해 5초마다 돌려보기. prod 전환 시 원복.
+- 10:30 잡 수동 트리거: `python -c "import asyncio; from app.scheduler import analyze_and_score_matchups; asyncio.run(analyze_and_score_matchups())"` — 오늘 날짜 기준 daily_schedules 읽어서 full pipeline 타봄.
+- `SELECT * FROM matchups WHERE game_date = date('now')` 로 write 결과 직접 확인 (`/api/today` 는 Phase 4).
+
+---
+
+## 🗣️ 다음 세션 시작 시 이 지시 그대로 주면 됨
+
+> **"Phase 3 sub-task 2 는 글루까지 완료 (커밋 ready). 다음 세션 우선순위는 carry-over A (데이터 소스 품질) → B (Claude 캐시 미스 실검증). 먼저 `PROGRESS.md` §"Phase 3 sub-task 2 carry-over" 읽고, A 섹션에서 `_fetch_statiz` → Daum 교체부터 착수. Daum 한 곳이라도 실제 2026 시즌 경기 데이터가 뽑히기 시작하면 그걸로 `scripts/crawl_today.py --write` 돌려서 `daily_schedules` row 확보한 뒤, `.env` 에 `ANTHROPIC_API_KEY` 꽂고 `analyze_and_score_matchups()` 수동 호출해서 B 섹션의 (1)~(3) 로그 확인까지 가는 게 이번 세션 정의. 리뷰 큐 dedup / publish 필터 / Alembic 같은 C 섹션은 최종 커밋 직전에 시간 남으면."**
 
 ---
 

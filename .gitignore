@@ -1,0 +1,55 @@
+# Secrets & env
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Node / Frontend
+node_modules/
+.next/
+out/
+.vite/
+frontend/dist/
+frontend/build/
+*.tsbuildinfo
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Crawled assets (keep manifest, exclude binaries)
+data/pitcher_images/*.jpg
+data/pitcher_images/*.jpeg
+data/pitcher_images/*.png
+data/pitcher_images/*.webp
+
+# Claude Code local
+.claude/settings.local.json

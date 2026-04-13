@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FACEMETRICS · 디자인 초안</title>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable.css" />
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          bg:    "#f7f7f7",
+          coral: { DEFAULT: "#F26B4E", light: "#FEF3F0", dark: "#C54A30" },
+          mint:  { DEFAULT: "#059669", light: "#D1FAE5", dark: "#065F46" },
+          ink:   { DEFAULT: "#111827", muted: "#6B7280", faint: "#9CA3AF" },
+        },
+        fontFamily: {
+          sans: ['"Pretendard Variable"', 'Pretendard', 'system-ui', 'sans-serif'],
+        },
+      },
+    },
+  };
+</script>
+
+<style>
+  html, body { background: #f7f7f7; color: #111827; }
+  body { font-family: "Pretendard Variable", Pretendard, system-ui, sans-serif; }
+
+  /* ── Score Bar 채우기 애니 ───────────────────────────────── */
+  @keyframes bar-fill {
+    from { width: 0%; }
+    to   { width: var(--pct, 0%); }
+  }
+  .bar-fill { animation: bar-fill 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both; }
+
+  /* ── 카드 fade + up 등장 ─────────────────────────────────── */
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .fade-up { animation: fade-up 0.7s ease-out both; }
+
+  /* ── 아코디언 상세 ───────────────────────────────────────── */
+  .detail { display: none; }
+  .is-open .detail {
+    display: block;
+    animation: fade-up 0.5s ease-out;
+  }
+  .expand-btn .chev { transition: transform 0.4s ease; }
+  .is-open .expand-btn .chev { transform: rotate(180deg); }
+  .is-open .expand-label-closed { display: none; }
+  .expand-label-open { display: none; }
+  .is-open .expand-label-open { display: inline; }
+
+  /* ── Radar fade ─────────────────────────────────────────── */
+  @keyframes radar-in {
+    from { opacity: 0; transform: scale(0.92); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  .is-open .radar-svg { animation: radar-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both; }
+
+  /* ── 카드 섀도 ───────────────────────────────────────────── */
+  .card-soft {
+    box-shadow:
+      0 1px 2px rgba(17, 24, 39, 0.04),
+      0 8px 24px rgba(17, 24, 39, 0.05);
+  }
+
+  /* ── Winner 카드 대각선 스트라이프 ────────────────────────── */
+  .stripes { position: relative; overflow: hidden; }
+  .stripes::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 10px,
+      rgba(255,255,255,0.35) 10px,
+      rgba(255,255,255,0.35) 11px
+    );
+    opacity: 0.55;
+    pointer-events: none;
+  }
+</style>
+</head>
+
+<body class="min-h-screen antialiased bg-bg text-ink">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     Section 1. Header
+     ═══════════════════════════════════════════════════════════════ -->
+<section class="flex min-h-[60vh] items-center justify-center bg-bg">
+  <div class="mx-auto w-full max-w-3xl px-4 text-center sm:px-6">
+    <img src="header_image.png" alt="FACEMETRICS" class="mx-auto mb-6 w-full max-w-md" />
+    <p class="mb-0.5 text-xs font-light text-ink-muted md:text-base">KBO · 2026 · SEASON</p>
+    <h1 class="text-[3.15rem] font-bold tracking-tight md:text-[4.2rem]" style="color: #0A192F;">
+      FACEMETRICS
+    </h1>
+    <p class="mt-3 text-lg text-ink-muted md:text-xl">
+      관상과 운세로 보는 오늘의 승리투수
+    </p>
+    <p class="mt-5 text-base italic" style="color: #B8860B;">
+      "확률이 반반이면 관상이 답이다"
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     Section 2. Today's Matchups
+     ═══════════════════════════════════════════════════════════════ -->
+<section class="bg-bg pb-24">
+  <div class="mx-auto max-w-3xl px-4 sm:px-6">
+
+    <div class="mb-8 flex items-end justify-between">
+      <div>
+        <p class="text-sm font-medium text-coral">Today's Matchups</p>
+        <h2 class="mt-1 text-2xl font-bold text-ink md:text-3xl">오늘의 매치업</h2>
+      </div>
+      <span class="text-xs text-ink-faint">04 / 13 · SUN</span>
+    </div>
+
+    <div class="grid gap-6">
+
+      <!-- ═══════════ Card 1 : LG vs 두산 (기본 펼침) ═══════════ -->
+      <div data-card class="fade-up is-open" style="animation-delay: 0.0s;">
+        <div class="card-soft rounded-2xl bg-white p-6 ring-1 ring-black/5 sm:p-8">
+
+          <!-- Summary row -->
+          <div class="mb-6 flex items-center justify-between gap-2">
+            <span class="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+              18:30 · 잠실
+            </span>
+            <span class="inline-flex items-center rounded-full bg-orange-100 px-3 py-1 text-xs font-medium text-orange-800">
+              개막 9차전
+            </span>
+          </div>
+
+          <!-- Team vs Team -->
+          <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+            <div class="flex items-center gap-3">
+              <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-coral-light">
+                <span class="text-xl font-bold text-coral">엔</span>
+              </div>
+              <div>
+                <div class="text-[11px] text-ink-faint">LG 트윈스</div>
+                <div class="text-xl font-bold text-ink">엔스</div>
+                <div class="mt-0.5 text-[11px] text-ink-muted">♏ 전갈 · 🐉 용띠</div>
+              </div>
+            </div>
+            <span class="text-xs font-medium text-ink-faint">VS</span>
+            <div class="flex items-center justify-end gap-3">
+              <div class="text-right">
+                <div class="text-[11px] text-ink-faint">두산 베어스</div>
+                <div class="text-xl font-bold text-ink">곽빈</div>
+                <div class="mt-0.5 text-[11px] text-ink-muted">♓ 물고기 · 🐍 뱀띠</div>
+              </div>
+              <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-mint-light">
+                <span class="text-xl font-bold text-mint-dark">곽</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Total score bar -->
+          <div class="mt-6 flex items-center justify-between gap-4">
+            <div class="flex items-baseline gap-1">
+              <span class="text-4xl font-bold text-coral">78</span>
+              <span class="text-xs text-ink-faint">점</span>
+            </div>
+            <div class="flex-1">
+              <div class="relative h-2 overflow-hidden rounded-full bg-gray-100">
+                <div class="bar-fill absolute left-0 top-0 h-full rounded-full bg-coral" style="--pct: 52%;"></div>
+                <div class="bar-fill absolute right-0 top-0 h-full rounded-full bg-mint" style="--pct: 48%; animation-delay: 0.25s;"></div>
+              </div>
+            </div>
+            <div class="flex items-baseline gap-1">
+              <span class="text-xs text-ink-faint">점</span>
+              <span class="text-4xl font-bold text-mint-dark">72</span>
+            </div>
+          </div>
+
+          <div class="mt-5 flex items-center justify-between border-t border-gray-100 pt-4">
+            <span class="text-xs text-ink-muted">오늘의 FACEMETRICS 예측</span>
+            <span class="text-sm font-semibold text-coral">⭐ 엔스 승</span>
+          </div>
+
+          <!-- Expand button -->
+          <button data-toggle class="expand-btn mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-coral-light py-3 text-xs font-semibold text-coral transition hover:bg-coral/15">
+            <span class="expand-label-closed">FACEMETRICS 상세</span>
+            <span class="expand-label-open">접기</span>
+            <svg class="chev h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+
+          <!-- ─────────── Expanded detail ─────────── -->
+          <div class="detail mt-8 space-y-8">
+
+            <!-- Radar chart -->
+            <div class="rounded-2xl border border-black/5 bg-gray-50 p-6">
+              <div class="mb-4 flex items-center justify-center gap-3">
+                <div class="h-px w-8 bg-coral/30"></div>
+                <span class="text-[11px] font-semibold uppercase tracking-[0.25em] text-coral">Five Elements</span>
+                <div class="h-px w-8 bg-coral/30"></div>
+              </div>
+
+              <div class="mx-auto max-w-sm">
+                <div data-radar data-home="16,17,15,18,12" data-away="14,12,16,15,15" class="aspect-square"></div>
+              </div>
+
+              <!-- 범례 + 총점 -->
+              <div class="mt-4 flex items-center justify-center gap-6 text-xs">
+                <div class="flex items-center gap-2">
+                  <span class="h-2.5 w-2.5 rounded-sm bg-coral"></span>
+                  <span class="text-ink">엔스</span>
+                  <span class="font-bold text-coral">78</span>
+                </div>
+                <div class="h-3 w-px bg-black/10"></div>
+                <div class="flex items-center gap-2">
+                  <span class="h-2.5 w-2.5 rounded-sm bg-mint"></span>
+                  <span class="text-ink">곽빈</span>
+                  <span class="font-bold text-mint-dark">72</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 5항목 상세 -->
+            <div class="space-y-4">
+
+              <!-- 제구력 -->
+              <div class="rounded-xl border border-black/5 bg-white p-5">
+                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex items-center gap-2">
+                    <span>🎯</span>
+                    <span class="text-sm font-semibold text-ink">제구력 · Command</span>
+                  </div>
+                  <div class="flex items-center gap-2 text-[11px] font-semibold">
+                    <span class="text-coral">16 엔스</span>
+                    <span class="text-ink-faint">·</span>
+                    <span class="text-mint-dark">14 곽빈</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="w-6 text-right text-sm font-bold text-coral">16</span>
+                  <div class="relative h-2 flex-1 overflow-hidden rounded-full bg-coral-light">
+                    <div class="bar-fill h-full rounded-full bg-coral" style="--pct: 80%;"></div>
+                  </div>
+                  <div class="relative h-2 flex-1 overflow-hidden rounded-full bg-mint-light">
+                    <div class="bar-fill ml-auto h-full rounded-full bg-mint" style="--pct: 70%; animation-delay: 0.2s;"></div>
+                  </div>
+                  <span class="w-6 text-sm font-bold text-mint-dark">14</span>
+                </div>
+                <div class="mt-4 grid gap-3 text-[11px] leading-relaxed sm:grid-cols-2">
+                  <div class="rounded-lg bg-coral-light p-3">
+                    <div class="mb-2 text-[11px] font-semibold text-coral">엔스</div>
+                    <p class="text-ink-muted"><span class="font-semibold text-coral">🙂 관상 9 :</span> 흔들림 없는 눈매가 코너를 찌르는 제구의 기운을 품었다</p>
+                    <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-coral">✨ 운세 7 :</span> 전갈자리 집중운 상위, 사사구 리스크 최소</p>
+                  </div>
+                  <div class="rounded-lg bg-mint-light p-3">
+                    <div class="mb-2 text-[11px] font-semibold text-mint-dark">곽빈</div>
+                    <p class="text-ink-muted"><span class="font-semibold text-mint-dark">🙂 관상 8 :</span> 눈과 눈썹 간격이 적당해 여유 있는 시야를 확보</p>
+                    <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-mint-dark">✨ 운세 6 :</span> 물고기자리 정밀운 평이, 볼끝이 살짝 흔들릴 수 있다</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 구위 -->
+              <div class="rounded-xl border border-black/5 bg-white p-5">
+                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex items-center gap-2">
+                    <span>💥</span>
+                    <span class="text-sm font-semibold text-ink">구위 · Stuff</span>
+                  </div>
+                  <div class="flex items-center gap-2 text-[11px] font-semibold">
+                    <span class="text-coral">17 엔스</span>
+                    <span class="text-ink-faint">·</span>
+                    <span class="text-mint-dark">12 곽빈</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="w-6 text-right text-sm font-bold text-coral">17</span>
+                  <div class="relative h-2 flex-1 overflow-hidden rounded-full bg-coral-light">
+                    <div class="bar-fill h-full rounded-full bg-coral" style="--pct: 85%; animation-delay: 0.05s;"></div>
+                  </div>
+                  <div class="relative h-2 flex-1 overflow-hidden rounded-full bg-mint-light">
+                    <div class="bar-fill ml-auto h-full rounded-full bg-mint" style="--pct: 60%; animation-delay: 0.25s;"></div>
+                  </div>
+                  <span class="w-6 text-sm font-bold text-mint-dark">12</span>
+                </div>
+                <div class="mt-4 grid gap-3 text-[11px] leading-relaxed sm:grid-cols-2">
+                  <div class="rounded-lg bg-coral-light p-3">
+                    <div class="mb-2 text-[11px] font-semibold text-coral">엔스</div>
+                    <p class="text-ink-muted"><span class="font-semibold text-coral">🙂 관상 10 :</span> 각진 턱과 단단한 하관에 파워 피처의 상이 그대로</p>
+                    <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-coral">✨ 운세 7 :</span> 용띠 체력운 양호, 마운드에서 힘이 남아돈다</p>
+                  </div>
+                  <div class="rounded-lg bg-mint-light p-3">
+                    <div class="mb-2 text-[11px] font-semibold text-mint-dark">곽빈</div>
+                    <p class="text-ink-muted"><span class="font-semibold text-mint-dark">🙂 관상 7 :</span> 둥근 턱에 힘이 실리지만 폭발력은 다소 부족</p>
+                    <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-mint-dark">✨ 운세 5 :</span> 뱀띠 활력운 중립, 초반 구속이 평소보다 낮을 수 있다</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 멘탈 -->
+              <div class="rounded-xl border border-black/5 bg-white p-5">
+                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex items-center gap-2">
+                    <span>🧘</span>
+                    <span class="text-sm font-semibold text-ink">멘탈 · Composure</span>
+                  </div>
+                  <div class="flex items-center gap-2 text-[11px] font-semibold">
+                    <span class="text-coral">15 엔스</span>
+                    <span class="text-ink-faint">·</span>
+                    <span class="text-mint-dark">16 곽빈</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="w-6 text-right text-sm font-bold text-coral">15</span>
+                  <div class="relative h-2 flex-1 overflow-hidden rounded-full bg-coral-light">
+                    <div class="bar-fill h-full rounded-full bg-coral" style="--pct: 75%; animation-delay: 0.1s;"></div>
+                  </div>
+                  <div class="relative h-2 flex-1 overflow-hidden rounded-full bg-mint-light">
+                    <div class="bar-fill ml-auto h-full rounded-full bg-mint" style="--pct: 80%; animation-delay: 0.3s;"></div>
+                  </div>
+                  <span class="w-6 text-sm font-bold text-mint-dark">16</span>
+                </div>
+                <div class="mt-4 grid gap-3 text-[11px] leading-relaxed sm:grid-cols-2">
+                  <div class="rounded-lg bg-coral-light p-3">
+                    <div class="mb-2 text-[11px] font-semibold text-coral">엔스</div>
+                    <p class="text-ink-muted"><span class="font-semibold text-coral">🙂 관상 7 :</span> 이마는 평이하나 인중이 뚜렷해 인내심은 충분</p>
+                    <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-coral">✨ 운세 8 :</span> 전갈자리 정신운 견고, 위기에 흔들리지 않는다</p>
+                  </div>
+                  <div class="rounded-lg bg-mint-light p-3">
+                    <div class="mb-2 text-[11px] font-semibold text-mint-dark">곽빈</div>
+                    <p class="text-ink-muted"><span class="font-semibold text-mint-dark">🙂 관상 9 :</span> 넓은 이마에 흔들림 없는 멘탈의 상이 보인다</p>
+                    <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-mint-dark">✨ 운세 7 :</span> 물고기자리 인내운 양호, 유연하게 상황을 받아낸다</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 지배력 -->
+              <div class="rounded-xl border border-black/5 bg-white p-5">
+                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex items-center gap-2">
+                    <span>👑</span>
+                    <span class="text-sm font-semibold text-ink">지배력 · Dominance</span>
+                  </div>
+                  <div class="flex items-center gap-2 text-[11px] font-semibold">
+                    <span class="text-coral">18 엔스</span>
+                    <span class="text-ink-faint">·</span>
+                    <span class="text-mint-dark">15 곽빈</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="w-6 text-right text-sm font-bold text-coral">18</span>
+                  <div class="relative h-2 flex-1 overflow-hidden rounded-full bg-coral-light">
+                    <div class="bar-fill h-full rounded-full bg-coral" style="--pct: 90%; animation-delay: 0.15s;"></div>
+                  </div>
+                  <div class="relative h-2 flex-1 overflow-hidden rounded-full bg-mint-light">
+                    <div class="bar-fill ml-auto h-full rounded-full bg-mint" style="--pct: 75%; animation-delay: 0.35s;"></div>
+                  </div>
+                  <span class="w-6 text-sm font-bold text-mint-dark">15</span>
+                </div>
+                <div class="mt-4 grid gap-3 text-[11px] leading-relaxed sm:grid-cols-2">
+                  <div class="rounded-lg bg-coral-light p-3">
+                    <div class="mb-2 text-[11px] font-semibold text-coral">엔스</div>
+                    <p class="text-ink-muted"><span class="font-semibold text-coral">🙂 관상 10 :</span> 짙고 기세 있는 눈썹이 마운드를 장악하는 카리스마</p>
+                    <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-coral">✨ 운세 8 :</span> 전갈자리 승부운 절정, 상대 타선을 압박한다</p>
+                  </div>
+                  <div class="rounded-lg bg-mint-light p-3">
+                    <div class="mb-2 text-[11px] font-semibold text-mint-dark">곽빈</div>
+                    <p class="text-ink-muted"><span class="font-semibold text-mint-dark">🙂 관상 8 :</span> 좌우 균형 잡힌 이목구비로 안정된 퍼포먼스</p>
+                    <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-mint-dark">✨ 운세 7 :</span> 뱀띠 권위운 무난, 이닝 소화력이 보장된다</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 운명력 -->
+              <div class="rounded-xl border border-black/5 bg-white p-5">
+                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex items-center gap-2">
+                    <span>✨</span>
+                    <span class="text-sm font-semibold text-ink">운명력 · Destiny</span>
+                  </div>
+                  <div class="flex items-center gap-2 text-[11px] font-semibold">
+                    <span class="text-coral">12 엔스</span>
+                    <span class="text-ink-faint">·</span>
+                    <span class="text-mint-dark">15 곽빈</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="w-6 text-right text-sm font-bold text-coral">12</span>
+                  <div class="relative h-2 flex-1 overflow-hidden rounded-full bg-coral-light">
+                    <div class="bar-fill h-full rounded-full bg-coral" style="--pct: 60%; animation-delay: 0.2s;"></div>
+                  </div>
+                  <div class="relative h-2 flex-1 overflow-hidden rounded-full bg-mint-light">
+                    <div class="bar-fill ml-auto h-full rounded-full bg-mint" style="--pct: 75%; animation-delay: 0.4s;"></div>
+                  </div>
+                  <span class="w-6 text-sm font-bold text-mint-dark">15</span>
+                </div>
+                <div class="mt-4 grid gap-3 text-[11px] leading-relaxed sm:grid-cols-2">
+                  <div class="rounded-lg bg-coral-light p-3">
+                    <div class="mb-2 text-[11px] font-semibold text-coral">엔스</div>
+                    <p class="text-ink-muted"><span class="font-semibold text-coral">🙂 관상 6 :</span> 첫인상은 무난하나 전체 인상 조화도가 평범</p>
+                    <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-coral">✨ 운세 6 :</span> 총운 평이, 용-뱀 중립 상성이 관건</p>
+                  </div>
+                  <div class="rounded-lg bg-mint-light p-3">
+                    <div class="mb-2 text-[11px] font-semibold text-mint-dark">곽빈</div>
+                    <p class="text-ink-muted"><span class="font-semibold text-mint-dark">🙂 관상 7 :</span> 둥근 얼굴에 복이 있는 귀와 입의 조화가 보인다</p>
+                    <p class="mt-1.5 text-ink-muted"><span class="font-semibold text-mint-dark">✨ 운세 8 :</span> 물고기 총운 상승세, 물-물 원소 동질 +1</p>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- 상성 분석 -->
+            <div class="rounded-2xl border border-coral/20 bg-coral-light p-6">
+              <div class="mb-3 flex items-center gap-2">
+                <span>⚔️</span>
+                <span class="text-[11px] font-semibold uppercase tracking-wider text-coral">상성 분석 · Chemistry</span>
+              </div>
+              <p class="text-sm leading-relaxed text-ink-muted">
+                <span class="font-semibold text-ink">띠:</span> 용띠 vs 뱀띠 — 상충도 상생도 아닌 <span class="font-semibold text-coral">중립</span> 관계 (+0)
+              </p>
+              <p class="mt-1 text-sm leading-relaxed text-ink-muted">
+                <span class="font-semibold text-ink">원소:</span> 전갈(물) vs 물고기(물) — 동질 <span class="font-semibold text-mint-dark">+1</span>
+              </p>
+              <p class="mt-3 text-xs italic text-ink-faint">
+                순수 실력과 기운의 대결. 오늘은 원소가 곽빈에게 미세한 손을 들어준다.
+              </p>
+            </div>
+
+            <!-- Winner card (coral + diagonal stripes) -->
+            <div class="stripes rounded-2xl bg-coral p-10 text-center">
+              <div class="relative">
+                <div class="mb-4 text-[11px] font-semibold uppercase tracking-[0.4em] text-white/80">오늘의 FACEMETRICS 승자</div>
+                <div class="flex items-center justify-center gap-4">
+                  <span class="text-2xl">⭐</span>
+                  <h3 class="text-4xl font-bold text-white sm:text-5xl">엔스</h3>
+                  <span class="text-2xl">⭐</span>
+                </div>
+                <div class="mt-3 flex items-center justify-center gap-3 text-xl font-bold">
+                  <span class="text-white">78</span>
+                  <span class="text-base font-medium text-white/70">vs</span>
+                  <span class="text-white/80">72</span>
+                </div>
+                <p class="mx-auto mt-5 max-w-sm text-sm italic text-white/90">
+                  "기세의 눈썹이 마운드를 지배한다"
+                </p>
+                <div class="mt-8 flex items-center justify-center gap-6 text-[11px] font-medium text-white/80">
+                  <div class="flex items-center gap-2">
+                    <span>🎰</span>
+                    <span>엔스 · 5회</span>
+                  </div>
+                  <span class="h-1 w-1 rounded-full bg-white/50"></span>
+                  <div class="flex items-center gap-2">
+                    <span>🎰</span>
+                    <span>곽빈 · 3회</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- /detail -->
+        </div>
+      </div>
+
+      <!-- ═══════════ Card 2 : SSG vs KT (접힘) ═══════════ -->
+      <div data-card class="fade-up" style="animation-delay: 0.1s;">
+        <div class="card-soft rounded-2xl bg-white p-6 ring-1 ring-black/5 sm:p-8">
+
+          <div class="mb-6 flex items-center justify-between gap-2">
+            <span class="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+              18:30 · 문학
+            </span>
+            <span class="inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
+              주말 홈경기
+            </span>
+          </div>
+
+          <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+            <div class="flex items-center gap-3">
+              <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-coral-light">
+                <span class="text-xl font-bold text-coral">광</span>
+              </div>
+              <div>
+                <div class="text-[11px] text-ink-faint">SSG 랜더스</div>
+                <div class="text-xl font-bold text-ink">김광현</div>
+                <div class="mt-0.5 text-[11px] text-ink-muted">♒ 물병 · 🐒 원숭이</div>
+              </div>
+            </div>
+            <span class="text-xs font-medium text-ink-faint">VS</span>
+            <div class="flex items-center justify-end gap-3">
+              <div class="text-right">
+                <div class="text-[11px] text-ink-faint">KT 위즈</div>
+                <div class="text-xl font-bold text-ink">쿠에바스</div>
+                <div class="mt-0.5 text-[11px] text-ink-muted">♌ 사자 · 🐎 말띠</div>
+              </div>
+              <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-mint-light">
+                <span class="text-xl font-bold text-mint-dark">쿠</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6 flex items-center justify-between gap-4">
+            <div class="flex items-baseline gap-1">
+              <span class="text-4xl font-bold text-coral">85</span>
+              <span class="text-xs text-ink-faint">점</span>
+            </div>
+            <div class="flex-1">
+              <div class="relative h-2 overflow-hidden rounded-full bg-gray-100">
+                <div class="bar-fill absolute left-0 top-0 h-full rounded-full bg-coral" style="--pct: 51%;"></div>
+                <div class="bar-fill absolute right-0 top-0 h-full rounded-full bg-mint" style="--pct: 49%; animation-delay: 0.3s;"></div>
+              </div>
+            </div>
+            <div class="flex items-baseline gap-1">
+              <span class="text-xs text-ink-faint">점</span>
+              <span class="text-4xl font-bold text-mint-dark">81</span>
+            </div>
+          </div>
+
+          <div class="mt-5 flex items-center justify-between border-t border-gray-100 pt-4">
+            <span class="text-xs text-ink-muted">오늘의 FACEMETRICS 예측</span>
+            <span class="text-sm font-semibold text-coral">⭐ 김광현 승</span>
+          </div>
+
+          <button data-toggle class="expand-btn mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-coral-light py-3 text-xs font-semibold text-coral transition hover:bg-coral/15">
+            <span class="expand-label-closed">FACEMETRICS 상세</span>
+            <span class="expand-label-open">접기</span>
+            <svg class="chev h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+
+          <div class="detail mt-8">
+            <div class="rounded-2xl border border-black/5 bg-gray-50 p-6">
+              <div class="mb-4 flex items-center justify-center gap-3">
+                <div class="h-px w-8 bg-coral/30"></div>
+                <span class="text-[11px] font-semibold uppercase tracking-[0.25em] text-coral">Five Elements</span>
+                <div class="h-px w-8 bg-coral/30"></div>
+              </div>
+              <div class="mx-auto max-w-sm">
+                <div data-radar data-home="17,18,16,17,17" data-away="15,17,16,16,17" class="aspect-square"></div>
+              </div>
+              <div class="mt-4 flex items-center justify-center gap-6 text-xs">
+                <div class="flex items-center gap-2">
+                  <span class="h-2.5 w-2.5 rounded-sm bg-coral"></span>
+                  <span class="text-ink">김광현</span>
+                  <span class="font-bold text-coral">85</span>
+                </div>
+                <div class="h-3 w-px bg-black/10"></div>
+                <div class="flex items-center gap-2">
+                  <span class="h-2.5 w-2.5 rounded-sm bg-mint"></span>
+                  <span class="text-ink">쿠에바스</span>
+                  <span class="font-bold text-mint-dark">81</span>
+                </div>
+              </div>
+              <p class="mt-5 text-center text-xs italic text-ink-faint">
+                "베테랑의 연륜이 신인의 패기를 미세한 차이로 앞선다"
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════ Card 3 : NC vs KIA (접힘) ═══════════ -->
+      <div data-card class="fade-up" style="animation-delay: 0.2s;">
+        <div class="card-soft rounded-2xl bg-white p-6 ring-1 ring-black/5 sm:p-8">
+
+          <div class="mb-6 flex items-center justify-between gap-2">
+            <span class="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+              14:00 · 광주
+            </span>
+            <span class="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-800">
+              더블헤더
+            </span>
+          </div>
+
+          <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+            <div class="flex items-center gap-3">
+              <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-coral-light">
+                <span class="text-xl font-bold text-coral">페</span>
+              </div>
+              <div>
+                <div class="text-[11px] text-ink-faint">NC 다이노스</div>
+                <div class="text-xl font-bold text-ink">페디</div>
+                <div class="mt-0.5 text-[11px] text-ink-muted">♐ 사수 · 🐕 개띠</div>
+              </div>
+            </div>
+            <span class="text-xs font-medium text-ink-faint">VS</span>
+            <div class="flex items-center justify-end gap-3">
+              <div class="text-right">
+                <div class="text-[11px] text-ink-faint">KIA 타이거즈</div>
+                <div class="text-xl font-bold text-ink">네일</div>
+                <div class="mt-0.5 text-[11px] text-ink-muted">♉ 황소 · 🐅 호랑이</div>
+              </div>
+              <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-mint-light">
+                <span class="text-xl font-bold text-mint-dark">네</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6 flex items-center justify-between gap-4">
+            <div class="flex items-baseline gap-1">
+              <span class="text-4xl font-bold text-coral">74</span>
+              <span class="text-xs text-ink-faint">점</span>
+            </div>
+            <div class="flex-1">
+              <div class="relative h-2 overflow-hidden rounded-full bg-gray-100">
+                <div class="bar-fill absolute left-0 top-0 h-full rounded-full bg-coral" style="--pct: 48%;"></div>
+                <div class="bar-fill absolute right-0 top-0 h-full rounded-full bg-mint" style="--pct: 52%; animation-delay: 0.35s;"></div>
+              </div>
+            </div>
+            <div class="flex items-baseline gap-1">
+              <span class="text-xs text-ink-faint">점</span>
+              <span class="text-4xl font-bold text-mint-dark">79</span>
+            </div>
+          </div>
+
+          <div class="mt-5 flex items-center justify-between border-t border-gray-100 pt-4">
+            <span class="text-xs text-ink-muted">오늘의 FACEMETRICS 예측</span>
+            <span class="text-sm font-semibold text-mint-dark">⭐ 네일 승</span>
+          </div>
+
+          <button data-toggle class="expand-btn mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-coral-light py-3 text-xs font-semibold text-coral transition hover:bg-coral/15">
+            <span class="expand-label-closed">FACEMETRICS 상세</span>
+            <span class="expand-label-open">접기</span>
+            <svg class="chev h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+
+          <div class="detail mt-8">
+            <div class="rounded-2xl border border-black/5 bg-gray-50 p-6">
+              <div class="mb-4 flex items-center justify-center gap-3">
+                <div class="h-px w-8 bg-coral/30"></div>
+                <span class="text-[11px] font-semibold uppercase tracking-[0.25em] text-coral">Five Elements</span>
+                <div class="h-px w-8 bg-coral/30"></div>
+              </div>
+              <div class="mx-auto max-w-sm">
+                <div data-radar data-home="14,16,15,15,14" data-away="15,17,16,16,15" class="aspect-square"></div>
+              </div>
+              <div class="mt-4 flex items-center justify-center gap-6 text-xs">
+                <div class="flex items-center gap-2">
+                  <span class="h-2.5 w-2.5 rounded-sm bg-coral"></span>
+                  <span class="text-ink">페디</span>
+                  <span class="font-bold text-coral">74</span>
+                </div>
+                <div class="h-3 w-px bg-black/10"></div>
+                <div class="flex items-center gap-2">
+                  <span class="h-2.5 w-2.5 rounded-sm bg-mint"></span>
+                  <span class="text-ink">네일</span>
+                  <span class="font-bold text-mint-dark">79</span>
+                </div>
+              </div>
+              <p class="mt-5 text-center text-xs italic text-ink-faint">
+                "호랑이 기운이 개띠의 뚝심을 살짝 넘어선다"
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     Footer
+     ═══════════════════════════════════════════════════════════════ -->
+<footer class="border-t border-black/5 bg-white py-10">
+  <div class="mx-auto max-w-3xl px-4 text-center">
+    <p class="text-[11px] leading-relaxed text-ink-muted">
+      ⚠️ 본 서비스는 100% 엔터테인먼트 목적으로 제작되었습니다.<br>
+      관상 및 운세 분석은 과학적 근거가 없으며, 실제 경기 결과 예측 또는 스포츠 베팅의 참고 자료로 활용될 수 없습니다.
+    </p>
+    <p class="mt-4 text-[10px] font-semibold tracking-widest text-coral">
+      FACEMETRICS · 2026
+    </p>
+  </div>
+</footer>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     JS: Radar chart generator + Accordion toggle
+     ═══════════════════════════════════════════════════════════════ -->
+<script>
+  // ── Radar chart (pentagon, FIFA overlay) ──
+  function generateRadar(el) {
+    const home = el.dataset.home.split(',').map(Number);
+    const away = el.dataset.away.split(',').map(Number);
+    const labels = ['제구력', '구위', '멘탈', '지배력', '운명력'];
+    const cx = 170, cy = 180, maxR = 130;
+
+    const pt = (ratio, i) => {
+      const ang = (-90 + i * 72) * Math.PI / 180;
+      const r = maxR * ratio;
+      return [cx + r * Math.cos(ang), cy + r * Math.sin(ang)];
+    };
+    const poly = (data) => data.map((v, i) => pt(v / 20, i).join(',')).join(' ');
+
+    const rings = [0.25, 0.5, 0.75, 1].map(rr =>
+      `<polygon points="${[0,1,2,3,4].map(i => pt(rr, i).join(',')).join(' ')}"
+                fill="none" stroke="rgba(17,24,39,${rr===1 ? 0.18 : 0.08})" stroke-width="1"/>`
+    ).join('');
+
+    const axes = [0,1,2,3,4].map(i => {
+      const [x, y] = pt(1, i);
+      return `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="rgba(17,24,39,0.08)" stroke-width="1"/>`;
+    }).join('');
+
+    const labelEls = labels.map((label, i) => {
+      const [x, y] = pt(1.22, i);
+      const h = home[i], a = away[i];
+      return `<text x="${x}" y="${y}" text-anchor="middle" font-family="Pretendard Variable, Pretendard, sans-serif">
+        <tspan x="${x}" dy="-4" font-size="12" font-weight="600" fill="#111827">${label}</tspan>
+        <tspan x="${x}" dy="15" font-size="9" font-weight="700" fill="#F26B4E">${h}</tspan><tspan font-size="9" fill="#9CA3AF"> / </tspan><tspan font-size="9" font-weight="700" fill="#059669">${a}</tspan>
+      </text>`;
+    }).join('');
+
+    const valueLabels = labels.map((_, i) => {
+      const [hx, hy] = pt(home[i] / 20, i);
+      const [ax, ay] = pt(away[i] / 20, i);
+      return `
+        <circle cx="${hx}" cy="${hy}" r="3.5" fill="#F26B4E" stroke="#ffffff" stroke-width="1.5"/>
+        <circle cx="${ax}" cy="${ay}" r="3.5" fill="#059669" stroke="#ffffff" stroke-width="1.5"/>
+      `;
+    }).join('');
+
+    el.innerHTML = `
+      <svg viewBox="0 0 340 360" class="radar-svg h-full w-full">
+        <circle cx="${cx}" cy="${cy}" r="${maxR + 10}" fill="rgba(242,107,78,0.03)"/>
+        ${rings}
+        ${axes}
+        <polygon points="${poly(away)}" fill="#059669" fill-opacity="0.18" stroke="#059669" stroke-width="2" stroke-linejoin="round"/>
+        <polygon points="${poly(home)}" fill="#F26B4E" fill-opacity="0.22" stroke="#F26B4E" stroke-width="2" stroke-linejoin="round"/>
+        ${valueLabels}
+        ${labelEls}
+      </svg>
+    `;
+  }
+  document.querySelectorAll('[data-radar]').forEach(generateRadar);
+
+  // ── Accordion toggle ──
+  document.querySelectorAll('[data-toggle]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const card = btn.closest('[data-card]');
+      card.classList.toggle('is-open');
+      if (card.classList.contains('is-open')) {
+        setTimeout(() => {
+          card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 50);
+      }
+    });
+  });
+</script>
+
+</body>
+</html>

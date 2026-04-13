@@ -1,0 +1,218 @@
+{
+  "generated_at": "2026-04-13T09:11:10.232945+00:00",
+  "pitchers": [
+    "원태인",
+    "곽빈",
+    "네일",
+    "카스타노",
+    "손주영",
+    "박세웅",
+    "임찬규",
+    "문동주",
+    "양현종",
+    "하트"
+  ],
+  "success": [
+    {
+      "index": 1,
+      "name": "원태인",
+      "source": "kbo",
+      "url": "https://6ptotvmi5753.edge.naverncp.com/KBO_IMAGE/person/middle/2026/69446.jpg",
+      "file": "data/pitcher_images/kbo/01_원태인.jpg",
+      "bytes": 14783,
+      "downloaded_at": "2026-04-13T09:11:13.423039+00:00",
+      "content_type": "image/jpeg"
+    },
+    {
+      "index": 2,
+      "name": "곽빈",
+      "source": "kbo",
+      "url": "https://6ptotvmi5753.edge.naverncp.com/KBO_IMAGE/person/middle/2026/68220.jpg",
+      "file": "data/pitcher_images/kbo/02_곽빈.jpg",
+      "bytes": 13127,
+      "downloaded_at": "2026-04-13T09:11:16.437271+00:00",
+      "content_type": "image/jpeg"
+    },
+    {
+      "index": 3,
+      "name": "네일",
+      "source": "kbo",
+      "url": "https://6ptotvmi5753.edge.naverncp.com/KBO_IMAGE/person/middle/2026/54640.jpg",
+      "file": "data/pitcher_images/kbo/03_네일.jpg",
+      "bytes": 13632,
+      "downloaded_at": "2026-04-13T09:11:19.621126+00:00",
+      "content_type": "image/jpeg"
+    },
+    {
+      "index": 4,
+      "name": "카스타노",
+      "source": "kbo",
+      "url": "https://6ptotvmi5753.edge.naverncp.com/KBO_IMAGE/person/middle/2024/54920.jpg",
+      "file": "data/pitcher_images/kbo/04_카스타노.jpg",
+      "bytes": 11370,
+      "downloaded_at": "2026-04-13T09:11:22.808960+00:00",
+      "content_type": "image/jpeg"
+    },
+    {
+      "index": 5,
+      "name": "손주영",
+      "source": "kbo",
+      "url": "https://6ptotvmi5753.edge.naverncp.com/KBO_IMAGE/person/middle/2026/67143.jpg",
+      "file": "data/pitcher_images/kbo/05_손주영.jpg",
+      "bytes": 13763,
+      "downloaded_at": "2026-04-13T09:11:25.864069+00:00",
+      "content_type": "image/jpeg"
+    },
+    {
+      "index": 6,
+      "name": "박세웅",
+      "source": "kbo",
+      "url": "https://6ptotvmi5753.edge.naverncp.com/KBO_IMAGE/person/middle/2026/64021.jpg",
+      "file": "data/pitcher_images/kbo/06_박세웅.jpg",
+      "bytes": 12856,
+      "downloaded_at": "2026-04-13T09:11:29.008717+00:00",
+      "content_type": "image/jpeg"
+    },
+    {
+      "index": 7,
+      "name": "임찬규",
+      "source": "kbo",
+      "url": "https://6ptotvmi5753.edge.naverncp.com/KBO_IMAGE/person/middle/2026/61101.jpg",
+      "file": "data/pitcher_images/kbo/07_임찬규.jpg",
+      "bytes": 14012,
+      "downloaded_at": "2026-04-13T09:11:32.237660+00:00",
+      "content_type": "image/jpeg"
+    },
+    {
+      "index": 8,
+      "name": "문동주",
+      "source": "kbo",
+      "url": "https://6ptotvmi5753.edge.naverncp.com/KBO_IMAGE/person/middle/2026/52701.jpg",
+      "file": "data/pitcher_images/kbo/08_문동주.jpg",
+      "bytes": 12955,
+      "downloaded_at": "2026-04-13T09:11:35.311515+00:00",
+      "content_type": "image/jpeg"
+    },
+    {
+      "index": 9,
+      "name": "양현종",
+      "source": "kbo",
+      "url": "https://6ptotvmi5753.edge.naverncp.com/KBO_IMAGE/person/middle/2026/77637.jpg",
+      "file": "data/pitcher_images/kbo/09_양현종.jpg",
+      "bytes": 13741,
+      "downloaded_at": "2026-04-13T09:11:38.468235+00:00",
+      "content_type": "image/jpeg"
+    },
+    {
+      "index": 10,
+      "name": "하트",
+      "source": "kbo",
+      "url": "https://6ptotvmi5753.edge.naverncp.com/KBO_IMAGE/person/middle/2024/54930.jpg",
+      "file": "data/pitcher_images/kbo/10_하트.jpg",
+      "bytes": 10844,
+      "downloaded_at": "2026-04-13T09:11:41.660358+00:00",
+      "content_type": "image/jpeg"
+    },
+    {
+      "index": 1,
+      "name": "원태인",
+      "source": "namuwiki",
+      "url": "https://i.namu.wiki/i/t1m2nar8k92_pZNMMbtQzTIJnSU3M16iZOrRTHZwMBt131BziwUW4Zluq-1AOdWZbVkkld25mabHEwbW3w1O4vLNRqYCIsPVj8QSsmOj4IrSy-atrrP608p8W79gXXPEEGChb57WJ-YsM13WDt5Svg.webp",
+      "file": "data/pitcher_images/namuwiki/01_원태인.webp",
+      "bytes": 207840,
+      "downloaded_at": "2026-04-13T09:11:42.352784+00:00",
+      "content_type": "image/webp"
+    },
+    {
+      "index": 2,
+      "name": "곽빈",
+      "source": "namuwiki",
+      "url": "https://i.namu.wiki/i/1nUct94_KCJqy3qQwoDtsMGqSdX3Gg5iyMdMMP2S1iiday7bicY2iw1k6Bcy7aQ3_qbZGKJuKfdGfv0CQeEXX-0iEVuo0kttML8bkni1o3n8r2Mb5TvA0Cs_iwWJlfjkuOeVpR7_Jy9VaNwqGGQw6Q.webp",
+      "file": "data/pitcher_images/namuwiki/02_곽빈.webp",
+      "bytes": 124968,
+      "downloaded_at": "2026-04-13T09:11:43.805658+00:00",
+      "content_type": "image/webp"
+    },
+    {
+      "index": 3,
+      "name": "네일",
+      "source": "namuwiki",
+      "url": "https://i.namu.wiki/i/mpi943bKREUK9fKxVbawUN4emrey6YneWsx-Qk7j2RL5bk02paP0KJYoUAOH4ERwqpvetGjq01dEsrD-RkV7TCuDfLtN-J_6hIMuYfyeJKh_IM9-IzsWMR0qlzeql27vE_N5j5uVIfIOpNpixz2jeQ.webp",
+      "file": "data/pitcher_images/namuwiki/03_네일.webp",
+      "bytes": 11062,
+      "downloaded_at": "2026-04-13T09:11:44.856250+00:00",
+      "content_type": "image/webp"
+    },
+    {
+      "index": 4,
+      "name": "카스타노",
+      "source": "namuwiki",
+      "url": "https://i.namu.wiki/i/ek9vezmBNscH3KCCskBIkChFvBKU6nh4skO9thjdJO6uaiwzquZC6ek8ePVqDhAj6dNbUon_yxuuVpDEPzaZtEwnKSpBfBnyF9F_Fch2w_ox2SEREFq5tKQr2RcBbWsSiyRuGIR9GTaB2UyCQj02Ew.webp",
+      "file": "data/pitcher_images/namuwiki/04_카스타노.webp",
+      "bytes": 17642,
+      "downloaded_at": "2026-04-13T09:11:45.917489+00:00",
+      "content_type": "image/webp"
+    },
+    {
+      "index": 5,
+      "name": "손주영",
+      "source": "namuwiki",
+      "url": "https://i.namu.wiki/i/TE5keuEM7vfSfmcwMl0LSdgii7tHetrX6fc44PmDns4bykRsgwyI_U_RLNOM2zh1YMBr8_I-sTCFPT3EM-iy6U1iDCRnqHDeRZ7dTUONOHVbUea3tuYX8XUFIWUni1Z2c1oEH718OjyhlcStIyTBtQ.webp",
+      "file": "data/pitcher_images/namuwiki/05_손주영.webp",
+      "bytes": 49000,
+      "downloaded_at": "2026-04-13T09:11:46.960551+00:00",
+      "content_type": "image/webp"
+    },
+    {
+      "index": 6,
+      "name": "박세웅",
+      "source": "namuwiki",
+      "url": "https://i.namu.wiki/i/O8277wLvOZR7R91OIJCHws_SEGTJ3lQblKGv3Ko8LasoUXoBHdGU3Mb59qmGgT5J_hyI5P_2qnUzoU6WCthgCwGFLyNlBnp_0Na_HLkO3F9n9pONSrsZc-mosqMx021ISUfTWYlNcpZI26-iInfFYw.webp",
+      "file": "data/pitcher_images/namuwiki/06_박세웅.webp",
+      "bytes": 36234,
+      "downloaded_at": "2026-04-13T09:11:48.014549+00:00",
+      "content_type": "image/webp"
+    },
+    {
+      "index": 7,
+      "name": "임찬규",
+      "source": "namuwiki",
+      "url": "https://i.namu.wiki/i/s8vpJEj4kIkvrDP9H9fVjVhEZ40ncOAbXYuse-zK0S6cnFZ1L_HfLANlhwgSfABQe96W_YMXAS4PlUZ6BxoAY7svYVdI6yHE-o8Mpls3N2k1mJZMho3xiE1gNWaAGtCCF9qzzMiXJNmBxEb9cDNc2Q.webp",
+      "file": "data/pitcher_images/namuwiki/07_임찬규.webp",
+      "bytes": 48778,
+      "downloaded_at": "2026-04-13T09:11:49.057031+00:00",
+      "content_type": "image/webp"
+    },
+    {
+      "index": 8,
+      "name": "문동주",
+      "source": "namuwiki",
+      "url": "https://i.namu.wiki/i/7cmsEmLKUs7_Ma85gG-4K5H1xxLaj2Jf_1Fz6cS2UQosh3R5_T10YElpJoOhlKgWpi9C5MwBXjPjYUu57KnpH1d-gRU_UUwp16YZM5gbHIG6TKUteO-hJDktRBvszEjlVg5GUKBi-OB2wDwTsKGprA.webp",
+      "file": "data/pitcher_images/namuwiki/08_문동주.webp",
+      "bytes": 40840,
+      "downloaded_at": "2026-04-13T09:11:50.106996+00:00",
+      "content_type": "image/webp"
+    },
+    {
+      "index": 9,
+      "name": "양현종",
+      "source": "namuwiki",
+      "url": "https://i.namu.wiki/i/Q11xpYXu6vXW6TvS1LV0nO6KRDyEFOe2acZ1kewwfoSskYjM9jENxjVee51EWnS-7iEDET0TF2LBEMr21QRZlLngc32aU8VMnNBrqln1xZj-kEyEUYfu7dMA82-1YF-uFhyl6W7ZfHM6itXgpeGCDA.webp",
+      "file": "data/pitcher_images/namuwiki/09_양현종.webp",
+      "bytes": 10904,
+      "downloaded_at": "2026-04-13T09:11:51.382328+00:00",
+      "content_type": "image/webp"
+    },
+    {
+      "index": 10,
+      "name": "하트",
+      "source": "namuwiki",
+      "url": "https://i.namu.wiki/i/LtFqiH5h4COAi3Inl5ma6qNhw4pPNSGFXUocKgmZiUoI_KuE8vmrUntPOPC4MZ7ZqFOeh6APjQ-UkEiEcKyjOOXQXuLuISZfihb63UlmoBOMPweZsHzgKnoDDwEWzdbF-x1E2hV_h0cx31LWHTVwPA.webp",
+      "file": "data/pitcher_images/namuwiki/10_하트.webp",
+      "bytes": 97770,
+      "downloaded_at": "2026-04-13T09:11:52.421193+00:00",
+      "content_type": "image/webp"
+    }
+  ],
+  "failed": []
+}

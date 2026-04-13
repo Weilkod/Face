@@ -307,3 +307,13 @@ Phase 1 + Phase 2 + Phase 3 sub-task 1 완료. 크롤러 초기 구현 (KBO/Nave
   `LOT(67539=나균안) @ LG(51111=송승기)`, `KT(64001=고영표) @ NC(56928=버하겐)`, `KW(64350=하영민) @ KIA(77637=양현종)` 등.
 - A-2/A-3/A-7 해소, A-5/A-6 blocker → nice-to-have 강등.
 - BeautifulSoup import 제거, `_fetch_starters` / `KBO_GAME_CENTER` 삭제.
+
+### 세션 4 (2026-04-13) — Phase 4 + §A-5/A-6 + §C
+- **Phase 4 완료:** API 라우터 6개 + Pydantic v2 응답 스키마 + `_helpers.py` 공유 헬퍼. `create_app()` 기동 시 `/api/today` 포함 15개 라우트 등록 확인.
+  - `GET /api/today`, `/api/matchup/{id}`, `/api/pitcher/{id}`, `/api/history?date=`, `/api/accuracy`
+  - `POST /admin/crawl-schedule`, `/admin/analyze-face/{id}`, `/admin/generate-fortune`, `/admin/calculate-matchups`, `/admin/update-result/{id}`
+- **§A-5 완료:** `pitchers.kbo_player_id` + `daily_schedules.home/away_starter_kbo_id` 컬럼 추가. `match_pitcher_by_kbo_id()` 신규. `upsert_schedule()` kbo_id 저장. scheduler ID 우선 → name 폴백 매칭. `init_db.py` idempotent SQLite ALTER.
+- **§A-6 부분완료:** `seed_pitchers.py` 에서 JSON `kbo_player_id` 필드 지원. 프로필 페이지 파싱 수확기는 ASMX 엔드포인트 검증 후 구현 예정(TODO 주석).
+- **§C-1/C-2 완료:** `publish_matchups` `is_published.is_(False)` 필터, `_append_review` dedup.
+- **code-reviewer 지적사항 처리:** `AXIS_ORDER` 단일 소스(`scoring_engine.py`), `MatchupSummary` disclaimer 설계 의도 주석, `init_db.py` dead import 제거.
+- **미완:** §B (Claude API 실검증) — API 키 없어서 다음 세션으로 이월. Phase 5 (프론트) 미착수.

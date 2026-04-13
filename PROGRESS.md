@@ -15,114 +15,100 @@
 
 - [x] **Phase 1** — 기반 구축 ✅ (2026-04-13)  
   FastAPI 스캐폴딩, 5 테이블 DB, 투수 10명 시드, init/seed 스크립트  
-  ⚠️ Python 3.14 + SQLAlchemy ≥ 2.0.49 필수 (`Mapped[Optional[str]]`, `__future__` 없음)
+  ⚠️ Python 3.11+ + SQLAlchemy ≥ 2.0 필수
 
 - [x] **Phase 2** — AI 엔진 ✅ (2026-04-13)  
   관상(Claude Vision) + 운세(Claude Text) + 상성(룰 기반) + scoring_engine  
-  ⚠️ Claude API 키 없이는 캐시 미스 경로 미검증 상태 — §B 필수
+  ⚠️ Claude API 키 없이는 캐시 미스 경로 미검증 — §B 필수
 
-- [x] **Phase 3 sub-task 1** — 크롤러 read-only ✅ (2026-04-13)  
-  KBO `GetKboGameList` 단일 소스, `/ws/` robots carve-out, 이름 매처
+- [x] **Phase 3** — 크롤러 + 스케줄러 ✅ (2026-04-13)  
+  `GetKboGameList` 단일 소스, `/ws/` robots carve-out, 5개 KST 잡, FastAPI lifespan  
+  smoke: `date(2026,4,14)` → 5경기 5/5 선발 확정 수신
 
-- [x] **Phase 3 sub-task 2** — DB write + Scheduler ✅ (2026-04-13)  
-  `upsert_schedule`, 5개 KST 잡(08:00/09:00/10:00/10:30/11:00), FastAPI lifespan wiring  
-  실 데이터 smoke: `date(2026,4,14)` → 5경기 5/5 선발 확정 수신
+- [x] **§A-5/A-6** — kbo_player_id + seed 지원 ✅ (2026-04-13)  
+  `pitchers.kbo_player_id`, `daily_schedules.home/away_starter_kbo_id`, `match_pitcher_by_kbo_id()`,  
+  ID 우선→name 폴백 매칭, idempotent SQLite ALTER, `seed_pitchers.py` kbo_id 필드 지원  
+  ⚠️ 프로필 페이지 수확기(자동 시드)는 미구현 — nice-to-have
+
+- [x] **§C-1/C-2** — 운영 개선 ✅ (2026-04-13)  
+  `publish_matchups` `is_published.is_(False)` 필터, `_append_review` dedup
+
+- [x] **Phase 4** — API 라우터 ✅ (2026-04-13)  
+  `/api/today`, `/api/matchup/{id}`, `/api/pitcher/{id}`, `/api/history`, `/api/accuracy`,  
+  `/admin/crawl-schedule`, `/admin/analyze-face/{id}`, `/admin/generate-fortune`,  
+  `/admin/calculate-matchups`, `/admin/update-result/{id}`  
+  Pydantic v2 응답 스키마, `_helpers.py` 공유 헬퍼, disclaimer 전 응답 포함
 
 ---
 
-## 현재 상태 (세션 3 기준, 2026-04-13)
+## 현재 상태 (세션 4 기준, 2026-04-13)
 
-크롤러 `GetKboGameList` 단일 소스로 재작성 완료. §A carry-over 의 A-2/A-3/A-4/A-7 전부 해소.  
-A-5/A-6 는 blocker 에서 nice-to-have 로 강등.  
-**다음 우선 작업:** §B (Claude API 키 꽂고 10:30 파이프 실검증)
-
----
-
-## [WPI] 세션 4 인계 (2026-04-13, 작업 장소 이동)
-
-**결정된 다음 경로:** §B 먼저 진행.
-
-**재개 시 첫 번째로 확인할 블로커:**
-- `backend/.env` 가 현재 **없음** (`.env.example` 만 존재). `ANTHROPIC_API_KEY` 주입이 §B 실검증의 전제조건.
-
-**집 환경에서 재개 순서:**
-1. `backend/.env` 생성 → `backend/.env.example` 복사 후 `ANTHROPIC_API_KEY=sk-ant-...` 입력
-   - 절대 커밋 금지 (`.gitignore` 확인)
-2. `claude-ai-integrator` 에이전트에 §B 위임:
-   ```
-   python -c "import asyncio; from app.scheduler import analyze_and_score_matchups; asyncio.run(analyze_and_score_matchups())"
-   ```
-   - Vision 첫 호출 → `face_scores` row 기록 로그 확인
-   - Text 첫 호출 → `fortune_scores` row 기록 로그 확인
-   - 재실행 → 캐시 히트, Claude 호출 0회 확인
-3. 병렬로 `fastapi-backend-dev` 에 아래 코드 작업 위임 (키 없어도 진행 가능):
-   - Vision 성공 + Text 실패 시 **고아 `face_scores` row 방지** (savepoint/rollback)
-   - `analyze_and_score_matchups` except 분기 **Claude mock + rollback 유닛 테스트**
-4. 완료 시 `code-reviewer` 게이트 (CLAUDE.md §7)
-
-**세션 3 에서 미커밋 상태로 남긴 변경:**
-- `CLAUDE.md`, `PROGRESS.md` 수정
-- `backend/app/schemas/crawler.py`, `backend/app/services/crawler.py` 재작성
-- 신규: `ARCHIVE.md`, `KBO_CRAWLING_GUIDE.md`, `scripts/test_crawl.py`
-- (본 WPI 커밋에 모두 포함됨)
-
-**기억해둘 가드레일 (CLAUDE.md 에서):**
-- 크롤러는 koreabaseball.com 단일 소스 — Naver/Statiz 폴백 금지
-- `/ws/` robots carve-out 는 koreabaseball.com/ws/* 에만 적용
-- 관상 점수는 시즌 고정, 운세는 `(pitcher_id, date)` 결정적 캐시
-- 상성 clamp `[0, 4]`, 운명력 axis 에만 적용
+백엔드 거의 완성. `uvicorn app.main:app` 기동 시 15개 라우트 등록, DB/스케줄러 정상 작동.  
+**남은 blocker:** §B (Claude API 키 꽂고 Vision/Text 파이프 실검증) — API 키 없어서 이월.  
+**다음 큰 작업:** Phase 5 (React 프론트엔드). API 키 없어도 진행 가능.
 
 ---
 
 ## 진행 중 TODO
 
-### A. 크롤러 마무리 (nice-to-have)
-
-- [ ] **A-5.** `pitchers` 에 `kbo_player_id` 컬럼 추가 + `match_pitcher_by_kbo_id()` 헬퍼  
-  → `pitcher.py` 컬럼 추가 → `init_db.py` idempotent ALTER → `scheduler` 매칭 로직을 ID 우선/name 폴백으로 교체  
-  → 동명이인 안전망 (두 명의 "박정훈" 등), 트레이드 직후 매칭 실패 복구
-- [ ] **A-6.** `seed_pitchers.py` 에 KBO 프로필 수확기 추가  
-  → `/Record/Player/PitcherDetail/Basic.aspx?playerId=...` 파싱 → 이름/생년월일/사진/kbo_player_id 자동 시드  
-  → 콜업·트레이드·외국인 영입 신인 자동 대응
-
 ### B. Phase 2 AI 실검증 (blocker — 배포 전 필수)
 
-- [ ] `.env` 에 `ANTHROPIC_API_KEY` → `python -c "import asyncio; from app.scheduler import analyze_and_score_matchups; asyncio.run(analyze_and_score_matchups())"` 수동 실행
+- [ ] `backend/.env` 생성 (`backend/.env.example` 복사 후 `ANTHROPIC_API_KEY=sk-ant-...` 입력, 커밋 금지)
+- [ ] `python -c "import asyncio; from app.scheduler import analyze_and_score_matchups; asyncio.run(analyze_and_score_matchups())"` 수동 실행
   - [ ] Claude Vision 첫 호출 → `face_scores` row 기록 로그 확인
   - [ ] Claude Text 첫 호출 → `fortune_scores` row 기록 로그 확인
   - [ ] 동일 `(pitcher_id, date)` 재실행 → DB 캐시 히트, Claude 호출 0회 확인
-- [ ] 고아 score row 문제 — Vision 성공 + Text 실패 시 savepoint 도입 또는 문서화 (`claude-ai-integrator` 위임)
+- [ ] 고아 score row — Vision 성공 + Text 실패 시 savepoint 도입 (`claude-ai-integrator` 위임)
 - [ ] `analyze_and_score_matchups` except 분기 — Claude mock + rollback 유닛 테스트
 
 ### C. 운영 잔여 (non-blocker)
 
-- [ ] `_append_review` dedup — 동일 `(date, team, side, name)` 중복 큐 방지
+- [x] `_append_review` dedup ✅
+- [x] `publish_matchups` is_published 필터 ✅
 - [ ] `_append_review` concurrency — fcntl lock 또는 `review_queue` DB 테이블 승격
-- [ ] `publish_matchups` — `is_published.is_(False)` 필터 추가
 - [ ] `analyze_and_score_matchups` — pitcher `IN [...]` 배치 로드 (현재 게임당 SELECT 2회)
 - [ ] Alembic 도입 여부 결정 (prod Postgres 전환 전. dev SQLite 는 수동 ALTER 허용)
+
+### A. 크롤러 잔여 (nice-to-have)
+
+- [x] A-5 `kbo_player_id` 컬럼 + ID 우선 매칭 ✅
+- [ ] A-6 프로필 수확기 — `/ws/Player.asmx` ASMX 엔드포인트 검증 후 `seed_pitchers.py --harvest` 구현  
+  → 콜업·트레이드·외국인 영입 신인 자동 대응 (`kbo-data-crawler` 위임)
 
 ---
 
 ## 다음 세션 시작 명령
 
 ```
-세션 3 완료. GetKboGameList 단일 소스 작동, 실 데이터 검증됨.
-§A-2/A-3/A-4/A-7 완료, §A-5/A-6 nice-to-have 강등.
+세션 4 완료. Phase 4 백엔드 API 라우터 완성, §A-5 kbo_player_id, §C 운영 개선.
+앱 기동 확인됨 (15개 라우트).
 
-- 옵션 1 (권장): §B — .env 에 ANTHROPIC_API_KEY 꽂고
-  python -c "import asyncio; from app.scheduler import analyze_and_score_matchups; asyncio.run(analyze_and_score_matchups())"
+옵션 1 — API 키 있을 때 (§B 우선):
+  backend/.env 에 ANTHROPIC_API_KEY 주입 후
+  PYTHONPATH=backend python -c "
+    import asyncio
+    from app.scheduler import analyze_and_score_matchups
+    asyncio.run(analyze_and_score_matchups())
+  "
   → Vision/Text 첫 호출 로그 + 두 번째 호출 캐시 히트 확인
+  담당: claude-ai-integrator 에이전트
 
-- 옵션 2: §A-5/A-6 마무리 → 그 다음 §B
+옵션 2 — API 키 없을 때 (Phase 5):
+  React 프론트엔드 시작 — TodayMatchups 페이지, MatchupCard 컴포넌트, 레이더 차트
+  frontend/preview/draft.html 의 디자인 토큰 (오프화이트+흰카드+coral #F26B4E+mint #059669) 기준
+  담당: react-ui-dev 에이전트
 
-세션 전 확인: CLAUDE.md §5 /ws/ carve-out 조항, memory feedback_crawler_source.md
+세션 전 확인사항:
+- CLAUDE.md §2 scoring invariants (관상 시즌 고정, 운세 결정론적 캐시, 상성 clamp [0,4])
+- CLAUDE.md §5 단일 소스 (koreabaseball.com, /ws/ carve-out만)
+- CLAUDE.md §6 disclaimer 전 페이지 필수
 ```
 
 ---
 
-## Phase 4~6 로드맵
+## Phase 5~6 로드맵
 
-- **Phase 4:** `app/routers/{today,matchup,pitcher,admin}.py`, Pydantic response schemas, pytest
-- **Phase 5:** `frontend/` — Next.js 14 App Router, shadcn/ui, Pretendard Variable, Recharts 레이더
-- **Phase 6:** docker-compose, 면책 고지, Vercel + Railway 배포, GitHub Actions 게이트, 공유 카드 PNG
+- **Phase 5:** `frontend/` — React 18 + TypeScript + Tailwind, Recharts 레이더 차트  
+  Pages: `TodayMatchups` → `MatchupDetail` → `PitcherPage` + `HistoryPage`  
+  Mobile-first (360px), share-card PNG 내보내기
+- **Phase 6:** docker-compose, Vercel(FE) + Railway(BE) 배포, GitHub Actions CI 게이트, 공유 카드

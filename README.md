@@ -334,6 +334,7 @@ lucky_inning은 1~9 사이, 이 투수가 가장 운이 좋은 이닝입니다.
 [pitchers] 투수 마스터
 ─────────────────────────────
 pitcher_id       PK, INTEGER
+kbo_player_id    INTEGER UNIQUE, nullable (KBO 공식 playerId, 크롤러가 학습·write-back)
 name             TEXT (한글명)
 name_en          TEXT (영문명, 외국인 투수용)
 team             TEXT (소속팀 약칭: LG, SSG, KT 등)
@@ -406,16 +407,18 @@ created_at       DATETIME
 
 [daily_schedules] KBO 일정
 ─────────────────────────────
-schedule_id      PK, INTEGER
-game_date        DATE
-home_team        TEXT
-away_team        TEXT
-stadium          TEXT
-game_time        TIME
-home_starter     TEXT (선발투수명)
-away_starter     TEXT (선발투수명)
-source_url       TEXT
-crawled_at       DATETIME
+schedule_id         PK, INTEGER
+game_date           DATE
+home_team           TEXT
+away_team           TEXT
+stadium             TEXT
+game_time           TIME
+home_starter        TEXT (선발투수 한글명)
+away_starter        TEXT (선발투수 한글명)
+home_starter_kbo_id INTEGER, nullable (GetKboGameList T_PIT_P_ID)
+away_starter_kbo_id INTEGER, nullable (GetKboGameList B_PIT_P_ID)
+source_url          TEXT
+crawled_at          DATETIME
 ```
 
 ### 5-2. KBO 10개 구단 코드
@@ -503,11 +506,17 @@ POST /admin/update-result/{matchup_id}
 
 ### 7-2. 크롤링 대상
 
-| 우선순위 | 소스 | 수집 정보 |
-|----------|------|-----------|
-| 1 | KBO 공식 홈페이지 (koreabaseball.com) | 경기 일정, 선발투수 |
-| 2 | 네이버 스포츠 (sports.naver.com) | 선발투수, 투수 프로필 사진 |
-| 3 | 스탯티즈 (statiz.co.kr) | 선수 상세 정보, 생년월일 |
+**단일 소스 정책: `koreabaseball.com`.** 네이버 스포츠·스탯티즈·Daum 등 다른 호스트로의 fallback 경로는 만들지 않는다. 공식 사이트 안에서 직접 문제를 해결한다 (사용자 지침 2026-04-13). 유일한 out-of-band fallback 은 `httpx` 접근이 완전히 실패했을 때의 **Playwright headless** 이다. 투수 프로필 사진은 수집 소스 제한 없음 (CLAUDE.md §6, 2026-04-14 지침).
+
+**주 엔드포인트:** `POST https://www.koreabaseball.com/ws/Main.asmx/GetKboGameList` — form body `date=YYYYMMDD&leId=1&srId=0,1,3,4,5,7` (1군 정규시리즈 필터, `backend/app/services/crawler.py:266` 기준). 단일 호출로 경기 리스트 + 선발투수 playerId (`T_PIT_P_ID`/`B_PIT_P_ID`) + 한글 이름 + 팀 + 구장 + 경기 시작 시각 + 취소 플래그를 반환한다. 구버전 2-step (`GetTodayGames` + GameCenter HTML 스크레이프) 체인은 폐기.
+
+**robots.txt 해석:** `/ws/` 는 blanket-disallow 이지만 KBO 공식 1군 일정 페이지 전체가 SPA 로 `/ws/` 에 의존한다. `services/crawler._robots_allows()` 는 `www.koreabaseball.com/ws/*` 에 한해 `True` 를 반환한다 (narrow carve-out; 다른 prefix/호스트는 정상 robots 적용). 결정 근거는 `PROGRESS.md §A-2` 세션 3 로그.
+
+**호출 규칙:** UA `FACEMETRICS/0.1 (+research)`, `Referer: https://www.koreabaseball.com/Schedule/GameCenter/Main.aspx`, `/ws/` POST 에는 `X-Requested-With: XMLHttpRequest` 추가. 호스트당 1 req/sec 상한.
+
+**선수 매칭:** `GetKboGameList` 가 반환하는 playerId 를 `pitchers.kbo_player_id` 로 1차 매칭 → 미매칭 시 한글 이름 exact → rapidfuzz fuzzy (≥ 85) 순. id-first 매칭 성공 시 해당 pitcher 로우의 `kbo_player_id` 를 lazy write-back 한다 (같은 `(pitcher_id, game_date)` 원자 트랜잭션 안에서, 실패 시 함께 롤백). 알 수 없는 이름은 review queue 로 보내고 조용히 드롭하지 않는다.
+
+**선발 미발표 대응:** 08:00 1차 크롤에서 선발이 비어 있으면 09:00, 10:00 에 재시도 후 포기.
 
 ---
 
@@ -710,13 +719,15 @@ POST /admin/update-result/{matchup_id}
 | **상태/페칭** | TanStack Query (SSR hydrate) | `/api/today` 캐싱, 매치업 상세 프리페치 |
 | **Backend** | FastAPI (Python 3.11+) | 비동기 처리, 자동 API 문서, 타입 힌트 |
 | **AI 엔진** | Anthropic Claude API | Vision(관상) + Text(운세) 통합 |
-| **DB** | SQLite (개발) → PostgreSQL (운영) | 초기 빠른 개발, 이후 확장성 |
-| **ORM** | SQLAlchemy 2.0 | Python 표준 ORM, 비동기 지원 |
-| **크롤러** | BeautifulSoup + httpx | 정적 페이지 파싱 + 비동기 HTTP |
-| **스케줄러** | APScheduler | Python 내장 크론 잡 |
-| **배포 (FE)** | Vercel | Next.js 최적 배포 |
-| **배포 (BE)** | Railway / Fly.io | FastAPI + DB 통합 배포 |
-| **CI/CD** | GitHub Actions | 자동 테스트 + 배포 |
+| **DB** | SQLite (`aiosqlite`, 개발) → PostgreSQL (`asyncpg`, 운영) | 초기 빠른 개발, 이후 확장성. Alembic env 가 두 드라이버 모두 인식 |
+| **ORM** | SQLAlchemy 2.0 (async) | Python 표준 ORM, `Mapped[...]` 타입 힌트, `AsyncSession` 필수 |
+| **Migrations** | Alembic 1.13.3 | 단일 진실 원천. `scripts/init_db.py` 가 `alembic upgrade head` 로 위임. `Base.metadata.create_all` 금지 |
+| **크롤러** | httpx + rapidfuzz | `httpx.AsyncClient` 비동기 HTTP, rapidfuzz 로 한글 이름 fuzzy 매칭(≥ 85) |
+| **스케줄러** | APScheduler (KST) | `app/scheduler.py` 내 5 잡 (08:00/09:00/10:00/10:30/11:00 KST). `lifespan` 에서 기동 |
+| **컨테이너화** | Docker + docker-compose (로컬 smoke) | `backend/Dockerfile` (python:3.12-slim + tini, non-root uid 1000), `frontend/Dockerfile` (node 20-alpine 멀티스테이지, Next `output: 'standalone'`), `docker-compose.yml` 에 sqlite bind-mount |
+| **배포 (FE)** | Vercel | Next.js 최적 배포, OG route Edge Runtime |
+| **배포 (BE)** | Railway / Fly.io | FastAPI + Postgres. APScheduler 싱글톤 보장 필요 (replicas ≥ 2 주의) |
+| **CI/CD** | GitHub Actions | `.github/workflows/ci.yml` — backend(`pytest` + import smoke + alembic upgrade), frontend(`type-check` + `build`) |
 
 ### 9-1-1. 디자인 시스템 (FACEMETRICS 톤앤매너)
 
@@ -743,81 +754,104 @@ POST /admin/update-result/{matchup_id}
 
 ```
 facemetrics/
-├── frontend/                   # Next.js 14 App Router
-│   ├── app/
-│   │   ├── layout.tsx                 # 라이트 테마, Pretendard Variable 단일 로드
-│   │   ├── page.tsx                   # "/" 오늘 매치업 (SSR fetch)
-│   │   ├── matchup/[id]/page.tsx      # 매치업 딥링크 (SSR)
-│   │   ├── pitcher/[id]/page.tsx      # 투수 프로필
-│   │   ├── history/page.tsx           # 과거 기록
-│   │   └── globals.css                # bar-fill, fade-up, radar-in, stripes 키프레임
-│   ├── components/
-│   │   ├── ui/                        # 재사용 primitives
-│   │   │   ├── number-ticker.tsx      # 점수 count-up
-│   │   │   └── (shine-border/timeline은 리스킨 후 미사용, 정리 예정)
-│   │   ├── matchup/
-│   │   │   ├── matchup-card.tsx       # 아코디언 카드 (흰 카드 + ring + soft shadow)
-│   │   │   ├── matchup-detail.tsx     # 확장 영역 컨테이너
-│   │   │   ├── radar-pentagon.tsx     # FIFA 스타일 오버레이 5각 레이더 (coral/mint)
-│   │   │   ├── category-block.tsx     # 5항목 설명 블록 (🙂/✨)
-│   │   │   ├── chemistry-note.tsx     # 상성 박스 (coral-light 카드)
-│   │   │   └── winner-card.tsx        # coral 솔리드 + 대각선 스트라이프 우승자 카드
-│   │   ├── pitcher/
-│   │   │   ├── profile-header.tsx
-│   │   │   └── fortune-timeline.tsx   # Timeline 스니펫 재사용
-│   │   └── layout/
-│   │       ├── header.tsx
-│   │       └── disclaimer.tsx         # 면책 고지
-│   ├── lib/
-│   │   ├── utils.ts                   # cn() shadcn 표준
-│   │   ├── api.ts                     # FastAPI 클라이언트
-│   │   ├── types.ts                   # MatchupSummary, PitcherProfile 등
-│   │   └── icons.ts                   # 5항목 → dicons 매핑
-│   ├── hooks/
-│   │   └── use-matchups.ts            # TanStack Query
-│   ├── tailwind.config.ts             # 팔레트/키프레임 확장
+├── frontend/                          # Next.js 14 App Router (src/ layout)
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── layout.tsx                   # 라이트 테마, Pretendard Variable
+│   │   │   ├── page.tsx                     # "/" TodayMatchups (히어로 + 아코디언)
+│   │   │   ├── globals.css                  # bar-fill, fade-up, radar-in 키프레임
+│   │   │   ├── history/page.tsx             # 과거 기록
+│   │   │   ├── pitcher/[id]/page.tsx        # 투수 프로필
+│   │   │   └── api/og/matchup/[id]/route.tsx # @vercel/og Edge, 1200×630 공유 카드
+│   │   ├── components/                      # 플랫 구조 (subfolder 없음)
+│   │   │   ├── MatchupCard.tsx              # 아코디언 카드 (흰 카드 + ring + soft shadow)
+│   │   │   ├── RadarChart.tsx               # SVG 5축 레이더 (coral/mint 오버레이)
+│   │   │   ├── ScoreBar.tsx
+│   │   │   ├── AxisDetail.tsx               # 5항목 설명 블록 (🙂/✨)
+│   │   │   ├── ShareButton.tsx              # OG route 링크 + 다운로드
+│   │   │   └── Footer.tsx                   # 면책 고지 푸터
+│   │   ├── lib/
+│   │   │   └── api.ts                       # FastAPI 클라이언트 + USE_MOCK 플래그
+│   │   └── types/
+│   │       └── index.ts                     # MatchupSummary, PitcherDetail 등
+│   ├── preview/draft.html                   # 디자인 톤 소스 오브 트루스
+│   ├── public/                              # 정적 에셋 (header_image 등)
+│   ├── tailwind.config.ts                   # coral/mint/ink 토큰 + 키프레임
+│   ├── next.config.mjs                      # output: 'standalone'
+│   ├── Dockerfile                           # node 20-alpine 멀티스테이지
 │   └── package.json
 │
-├── backend/                    # FastAPI 앱
+├── backend/                           # FastAPI 앱
 │   ├── app/
-│   │   ├── main.py                    # FastAPI 엔트리포인트
-│   │   ├── models/                    # SQLAlchemy 모델
+│   │   ├── main.py                          # FastAPI + lifespan (스케줄러 기동)
+│   │   ├── config.py                        # pydantic-settings (.env)
+│   │   ├── db.py                            # AsyncSession 팩토리
+│   │   ├── scheduler.py                     # APScheduler 5 잡 (KST)
+│   │   ├── models/                          # SQLAlchemy Mapped[...] 모델
 │   │   │   ├── pitcher.py
 │   │   │   ├── face_score.py
 │   │   │   ├── fortune_score.py
 │   │   │   ├── matchup.py
-│   │   │   └── schedule.py
-│   │   ├── routers/                   # API 라우터
-│   │   │   ├── today.py
-│   │   │   ├── matchup.py
-│   │   │   ├── pitcher.py
-│   │   │   └── admin.py
-│   │   ├── services/                  # 비즈니스 로직
-│   │   │   ├── crawler.py             # KBO 일정 크롤러
-│   │   │   ├── face_analyzer.py       # 관상 분석 (Claude Vision)
-│   │   │   ├── fortune_generator.py   # 운세 생성 (Claude Text)
-│   │   │   ├── chemistry_calculator.py # 상성 계산
-│   │   │   └── scoring_engine.py      # 종합 스코어링
-│   │   ├── prompts/                   # AI 프롬프트 템플릿
-│   │   │   ├── face_analysis.txt
-│   │   │   └── fortune_reading.txt
-│   │   └── config.py
-│   ├── tests/
+│   │   │   └── daily_schedule.py
+│   │   ├── schemas/                         # Pydantic v2
+│   │   │   ├── ai.py                        # Claude 응답 스키마
+│   │   │   ├── crawler.py                   # GetKboGameList 파서 스키마
+│   │   │   └── response.py                  # 라우터 응답 스키마
+│   │   ├── routers/
+│   │   │   ├── today.py                     # GET /api/today
+│   │   │   ├── matchup.py                   # GET /api/matchup/{id}
+│   │   │   ├── pitcher.py                   # GET /api/pitcher/{id}
+│   │   │   ├── history.py                   # GET /api/history
+│   │   │   ├── accuracy.py                  # GET /api/accuracy
+│   │   │   ├── admin.py                     # POST /admin/*
+│   │   │   └── _helpers.py                  # pitcher_summary() 공용
+│   │   ├── services/
+│   │   │   ├── crawler.py                   # koreabaseball.com /ws/ 전용 + 이름 매처
+│   │   │   ├── face_analyzer.py             # Claude Vision + 캐시 write-through
+│   │   │   ├── fortune_generator.py         # Claude Text + 결정론 캐시
+│   │   │   ├── chemistry_calculator.py      # 띠·별자리 룰 기반 상성
+│   │   │   ├── scoring_engine.py            # 5축 합산 + predicted_winner
+│   │   │   └── hash_fallback.py             # Claude 실패 시 해시 스코어러
+│   │   └── prompts/
+│   │       ├── face_analysis.txt
+│   │       └── fortune_reading.txt
+│   ├── alembic/                             # 마이그레이션 (단일 진실 원천)
+│   │   ├── env.py                           # async aiosqlite/asyncpg 모두 지원
+│   │   └── versions/
+│   │       ├── 0001_initial_schema.py       # 5 테이블 초기 생성
+│   │       └── 0002_add_kbo_player_id.py    # A-5 세션 10
+│   ├── alembic.ini
+│   ├── tests/                               # pytest (async)
+│   │   ├── conftest.py                      # 임시 sqlite DATABASE_URL 주입
+│   │   ├── test_analyze_rollback.py         # 원자 트랜잭션 회귀 가드
+│   │   └── test_kbo_id_matcher.py           # id-first + lazy write-back
+│   ├── Dockerfile                           # python:3.12-slim + tini (non-root uid 1000)
 │   └── requirements.txt
 │
-├── data/                       # 정적 데이터
-│   ├── pitchers_2026.json             # 투수 마스터 데이터
-│   ├── zodiac_compatibility.json      # 띠 궁합표
-│   └── constellation_elements.json    # 별자리 원소 매핑
+├── data/                              # 정적 데이터 + sqlite bind-mount 대상
+│   ├── pitchers_2026.json
+│   ├── zodiac_compatibility.json
+│   ├── constellation_elements.json
+│   └── facemetrics.db                       # (dev, git-ignored)
 │
-├── scripts/                    # 유틸리티 스크립트
-│   ├── init_db.py                     # DB 초기화
-│   ├── seed_pitchers.py               # 투수 데이터 시딩
-│   └── backfill_faces.py             # 관상 일괄 분석
+├── scripts/                           # 유틸리티 (독립 실행)
+│   ├── init_db.py                           # alembic upgrade head 위임
+│   ├── seed_pitchers.py                     # 투수 10명 시딩
+│   ├── verify_ai_pipeline.py                # 실 Claude 파이프라인 캐시 미스/히트 검증
+│   ├── crawl_today.py                       # GetKboGameList 단발 크롤
+│   └── crawl_pitcher_images.py              # 프로필 사진 수확
 │
-├── docker-compose.yml
-├── .env.example
-└── README.md
+├── .claude/                           # 에이전트 정의 + 훅
+│   ├── agents/                              # react-ui-dev, fastapi-backend-dev 등
+│   └── hooks/code-reviewer-gate.sh          # stop hook: 자동 code-reviewer
+├── .github/workflows/ci.yml           # backend pytest + frontend build
+├── docker-compose.yml                 # backend:8000 + frontend:3000 (로컬 smoke)
+├── .dockerignore
+├── CLAUDE.md                          # 에이전트용 실행 가이드
+├── PROGRESS.md                        # 세션 저널 (ARCHIVE.md 로 이동 예정)
+├── ARCHIVE.md                         # 완료 Phase 세부 로그
+├── KBO_CRAWLING_GUIDE.md              # /ws/ 엔드포인트 레퍼런스
+└── README.md                          # 본 스펙
 ```
 
 ---
@@ -851,10 +885,9 @@ facemetrics/
 |--------|------|-----------|
 | 선발투수 당일 변경 | 이미 생성한 콘텐츠 무효화 | 변경 감지 시 자동 재생성 + "선발 변경" 알림 |
 | Claude API 장애 | 운세/관상 생성 불가 | 해시 기반 폴백 점수 + 이전 데이터 재활용 |
-| 크롤링 차단 | 일정/선발 데이터 수집 불가 | 다중 소스(KBO, 네이버, 스탯티즈) + 수동 입력 백업 |
-| 투수 사진 없음 | 관상 분석 불가 | 기본 관상 점수 적용 + 사진 확보 시 업데이트 |
+| 크롤링 차단 | 일정/선발 데이터 수집 불가 | `httpx` → Playwright headless fallback + 수동 입력 백업 (단일 소스 `koreabaseball.com` 정책은 유지, §7-2 참조) |
+| 투수 사진 없음 | 관상 분석 불가 | 모든 가용 소스에서 수집 (KBO 공식/뉴스/SNS/검색), 실루엣 플레이스홀더 금지 (CLAUDE.md §6) |
 | "도박 조장" 오해 | 법적/이미지 리스크 | 모든 화면에 "엔터테인먼트 목적" 면책 고지. 배팅 연동 절대 없음. |
-| 선수 초상권 | 법적 리스크 | KBO 공식 제공 사진 사용 또는 라이선스 확인 |
 
 ---
 

@@ -67,7 +67,7 @@ Run them in parallel when the work is independent (e.g. crawler + fortune genera
 ## 6. Legal / ethical guardrails (non-negotiable)
 
 - Every page must show "엔터테인먼트 목적" disclaimer. **Never** link to or mention betting, odds, or real-money predictions.
-- Pitcher photos: only KBO-official or verified-license sources. If unlicensed, use a placeholder silhouette and skip 관상 analysis — do not scrape arbitrary social media.
+- Pitcher photos: fetch from any available source regardless of license — KBO-official, news sites, social media, search engines, whatever works. License/copyright concerns are explicitly out of scope for this project (user directive 2026-04-14). Never fall back to a silhouette placeholder if a real photo can be obtained; 관상 analysis requires a real face.
 - Fortune/physiognomy commentary stays light and playful. No negative personal judgments about real players beyond baseball-performance framing.
 
 ## 7. Before you claim "done"
@@ -83,5 +83,5 @@ Run them in parallel when the work is independent (e.g. crawler + fortune genera
 - Don't call Claude inside request handlers synchronously blocking the user; the daily pipeline should have pre-populated everything by 11:00.
 - Don't invent KBO team codes — stick to `LG / SSG / KT / NC / DS / KIA / LOT / SAM / HH / KW`.
 - `frontend/components/ui/shine-border.tsx` and `timeline.tsx` are **legacy stubs** from the old dark/oriental tone — they're no longer used by the current `draft.html` design and are slated for removal. Don't build new features around them; prefer deleting or replacing them when touching the `ui/` folder.
-- Don't commit `.env`, API keys, scraped photos of unclear provenance, or `*.db` SQLite files.
+- Don't commit `.env`, API keys, or `*.db` SQLite files.
 - Don't add features, endpoints, or tables not in `README.md` §5–6 without asking first.

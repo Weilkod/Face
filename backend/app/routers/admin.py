@@ -110,16 +110,21 @@ async def analyze_face(
             detail="API key not configured: set ANTHROPIC_API_KEY in environment",
         )
 
-    pitcher = (
-        await session.execute(select(Pitcher).where(Pitcher.pitcher_id == pitcher_id))
-    ).scalar_one_or_none()
-    if pitcher is None:
-        raise HTTPException(status_code=404, detail="Pitcher not found")
-
     season = date.today().year
     try:
+        pitcher = (
+            await session.execute(select(Pitcher).where(Pitcher.pitcher_id == pitcher_id))
+        ).scalar_one_or_none()
+        if pitcher is None:
+            await session.rollback()
+            raise HTTPException(status_code=404, detail="Pitcher not found")
+
         face_score = await get_or_create_face_scores(session, pitcher, season=season)
+        await session.commit()
+    except HTTPException:
+        raise
     except Exception as exc:
+        await session.rollback()
         logger.exception(
             "[admin:analyze-face] failed for pitcher_id=%d: %s", pitcher_id, exc
         )
@@ -180,6 +185,9 @@ async def generate_fortune(
     skipped = 0
     failed = 0
 
+    # Per-iteration commit boundary intentional: each (pitcher, date) is its
+    # own cache row and a Claude failure for one pitcher should not invalidate
+    # already-persisted fortune rows for previous pitchers in the same batch.
     for sched in schedule_rows:
         for starter_name, own_team, opp_team in [
             (sched.home_starter, sched.home_team, sched.away_team),
@@ -189,40 +197,46 @@ async def generate_fortune(
                 skipped += 1
                 continue
 
-            # Resolve name → Pitcher row (exact match only here — admin path)
-            pitcher = (
-                await session.execute(
-                    select(Pitcher).where(
-                        Pitcher.name == starter_name,
-                        Pitcher.team == own_team,
-                    )
-                )
-            ).scalar_one_or_none()
-
-            if pitcher is None:
-                logger.warning(
-                    "[admin:generate-fortune] pitcher not found: name=%s team=%s",
-                    starter_name,
-                    own_team,
-                )
-                skipped += 1
-                continue
-
-            # Check if already cached
-            existing = (
-                await session.execute(
-                    select(FortuneScore).where(
-                        FortuneScore.pitcher_id == pitcher.pitcher_id,
-                        FortuneScore.game_date == target_date,
-                    )
-                )
-            ).scalar_one_or_none()
-
-            if existing is not None:
-                skipped += 1
-                continue
-
+            # Resolve + check-cache + write are wrapped together so a DB hiccup
+            # during the resolve SELECTs still cleanly rolls back any open
+            # implicit transaction before the next iteration runs.
+            pitcher_id_for_log: Optional[int] = None
             try:
+                pitcher = (
+                    await session.execute(
+                        select(Pitcher).where(
+                            Pitcher.name == starter_name,
+                            Pitcher.team == own_team,
+                        )
+                    )
+                ).scalar_one_or_none()
+
+                if pitcher is None:
+                    await session.rollback()
+                    logger.warning(
+                        "[admin:generate-fortune] pitcher not found: name=%s team=%s",
+                        starter_name,
+                        own_team,
+                    )
+                    skipped += 1
+                    continue
+
+                pitcher_id_for_log = pitcher.pitcher_id
+
+                existing = (
+                    await session.execute(
+                        select(FortuneScore).where(
+                            FortuneScore.pitcher_id == pitcher.pitcher_id,
+                            FortuneScore.game_date == target_date,
+                        )
+                    )
+                ).scalar_one_or_none()
+
+                if existing is not None:
+                    await session.rollback()
+                    skipped += 1
+                    continue
+
                 await get_or_create_fortune_scores(
                     session,
                     pitcher,
@@ -230,11 +244,13 @@ async def generate_fortune(
                     opponent_team=opp_team,
                     stadium=sched.stadium or "미정",
                 )
+                await session.commit()
                 generated += 1
             except Exception as exc:
+                await session.rollback()
                 logger.exception(
-                    "[admin:generate-fortune] failed for pitcher_id=%d date=%s: %s",
-                    pitcher.pitcher_id,
+                    "[admin:generate-fortune] failed for pitcher_id=%s date=%s: %s",
+                    pitcher_id_for_log,
                     target_date,
                     exc,
                 )

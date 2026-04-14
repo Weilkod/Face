@@ -14,7 +14,12 @@ Flow:
        First try: temperature=0.7.
     4. Parse JSON → FortuneReadingResult. On failure, retry once (temperature=0).
     5. On second failure or API error, use hash_fortune_scores fallback.
-    6. Insert FortuneScore row, commit, return.
+    6. session.add() + session.flush() — caller owns the transaction and is
+       responsible for commit/rollback (see face_analyzer for the same pattern).
+
+Note: flush() can raise IntegrityError on the unique (pitcher_id, game_date)
+constraint under concurrent inserts. Callers wrap the call in their outer
+try/except.
 
 Implements README §3-2, §3-3, §4-2 and CLAUDE.md §2, §4.
 """
@@ -286,6 +291,5 @@ async def get_or_create_fortune_scores(
             fortune_score_obj = _build_fortune_score_from_fallback(pitcher.pitcher_id, game_date)
 
     session.add(fortune_score_obj)
-    await session.commit()
-    await session.refresh(fortune_score_obj)
+    await session.flush()  # populate PK; caller owns the transaction
     return fortune_score_obj

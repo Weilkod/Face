@@ -67,84 +67,68 @@
   - `MatchupCard.tsx` 에 ShareButton 마운트, "공유 이미지 저장" 버튼  
   - 검증: `npm run build` clean — 새 라우트 `ƒ /api/og/matchup/[id]` Edge 로 등록
 
+- [x] **Phase 6 sub-task 3** — commit 98a36f3 사후 code-reviewer 리뷰 및 수정 ✅ (2026-04-13, 세션 6)  
+  브랜치: `claude/fix-post-hoc-review-98a36f3` · 커밋: `741fc34`  
+  세션 5 가 `code-reviewer-gate.sh` stop hook 을 우회한 채로 commit/push 했기 때문에 (post-commit 이라 `git diff HEAD` clean → silent pass) 사후로 리뷰 게이트를 집행.  
+  리뷰어 Verdict: **BLOCK** (Critical 1 / Important 2 / Nits 3) → 3건 수정:
+  - **R1 (Critical)** `scripts/seed_pitchers.py` — `Base.metadata.create_all` 제거. Alembic 단일 진실 원칙 복원, 선행 요구사항 (`init_db.py` 먼저) docstring 에 명시, 미사용 `Base` import 삭제.
+  - **R2 (Important)** `backend/alembic/versions/0001_initial_schema.py` — pitchers `updated_at` 에 `onupdate=sa.func.now()` 추가. `app/models/pitcher.py:28` 와 metadata drift 해소 (ORM hook 이라 DDL 변화 0, autogenerate 재실행 시 잡음 제거).
+  - **R3 (Important)** `frontend/src/app/api/og/matchup/[id]/route.tsx` — `paramInt(req, key, fallback, {min, max})` 로 시그니처 확장 후 `homeTotal`/`awayTotal` 에 `{min: 0, max: 100}` 적용. `?homeTotal=99999999` 같은 악의적 URL 이 OG 카드에 7자리 숫자 분사하는 브랜드 오염 차단.  
+  검증: `ast.parse` OK (Python 2개), `npx tsc --noEmit` clean (frontend, `npm install` 후), `paramInt` 호출자 2건 모두 신 시그니처로 업데이트됨 확인.  
+  Nits 3건 (matchup model `server_default=text("0")`, init_db URL 중복 주입, `ScoreBar.maxScore` 미사용 prop) 은 세션 7 로 이월.
+
 ---
 
-## 현재 상태 (세션 5 기준, 2026-04-13)
+## 현재 상태 (세션 6 기준, 2026-04-13)
 
-Phase 4 라우터 + Phase 5 프론트엔드 구조 + Phase 6 **Alembic** & **@vercel/og** 도입 완성.  
-`npm run build` clean (5개 라우트, OG edge route 포함), 백엔드 alembic upgrade/downgrade 라운드트립 OK.  
-**세션 4 코드 리뷰어 BLOCK 이슈들 (C1~C5, I1~I6)은 여전히 미수정 상태 — 다음 세션 우선 작업.**
+Phase 6 sub-task 1~3 모두 완료. Alembic 마이그레이션 + @vercel/og 공유 카드 + 사후 code-reviewer 수정까지 들어갔고, 세션 4/5 `code-reviewer` BLOCK 지적사항(C1~C5, I1~I6, D-1~D-7) 은 PR #1 (`726a3ea`, `e31c3c1`, `f4fba33`) + 이번 세션의 사후 리뷰로 대부분 해소됨.  
+**배포 이전 남은 blocker 는 §B (AI 실검증) 뿐이며, 나머지는 nits/운영 잔여/Phase 6 배포 작업.**
 
 ---
 
-## [WPI] 세션 5 인계 (2026-04-13)
+## [WPI] 세션 7 인계 (2026-04-13)
 
-### 브랜치
-`claude/phase-5-no-api-5jocG`
+### 시작 상태
+- 현재 브랜치 (이전 세션이 남긴 것): `claude/fix-post-hoc-review-98a36f3` — 푸시 완료, **PR 대기**
+- `origin/main` @ `24c80bd` (PR #2 머지됨)
+- `.env` 에 `ANTHROPIC_API_KEY` 여전히 없음 → §B 미검증
 
-### 세션 시작 전 커밋 필요 (staged 상태)
-```
-git commit -m "chore: linter type changes, delete legacy UI stubs, gitignore next-env.d.ts"
-git push
-```
-스테이지된 내용:
-- `frontend/src/types/index.ts` — 린터 수정 반영
-- `frontend/components/ui/shine-border.tsx`, `timeline.tsx` — 삭제
-- `frontend/next-env.d.ts` — Next.js 자동생성 (`.gitignore` 추가됨)
-- `.gitignore` — `frontend/next-env.d.ts` 항목 추가
+### 첫 턴에 할 일
+1. 이 브랜치 PR 리뷰/머지 상태 확인. 아직 머지 안 됐으면 체크아웃해서 이어가거나 신규 브랜치 분기.
+2. 아래 "코드 리뷰어 사후 리뷰 잔여 (nit)" 3건을 `fastapi-backend-dev` / `react-ui-dev` 에 병렬 위임.
+3. §D 의 D-4(partial), D-7(미해결), D-8 을 확인 후 일괄 처리.
+4. §B 시작 여부 결정 (API 키 확보 가능 여부).
 
-### 코드 리뷰어 BLOCK 이슈 (최우선 수정 대상)
+### 코드 리뷰어 사후 리뷰 잔여 (nit — 블로커 아님)
 
-#### 🔴 CRITICAL
+- [ ] **N1** `backend/app/models/matchup.py:26-28` — `chemistry_score` / `home_total` / `away_total` 에 `server_default=text("0")` 추가하여 migration 의 `server_default="0"` 과 정합성 확보. 현재 ORM `default=` 만 있고 raw SQL INSERT fallback 이 없어 drift.
+- [ ] **N2** `scripts/init_db.py:33` — `set_main_option("sqlalchemy.url", ...)` 가 `backend/alembic/env.py` 와 중복 주입됨. env.py 를 유일 진실 원소로 두도록 init_db 에서 제거 (또는 주석으로 의도 명시).
+- [ ] **N3** `frontend/src/components/ScoreBar.tsx:6,13` — `maxScore?: number` prop 이 타입에만 선언되고 본문에서 사용되지 않음 (dead parameter). 제거.
 
-**C1 — `frontend/src/lib/api.ts:17`**  
-`USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true" || true` → `|| true` 제거  
-실제 API가 영구 차단됨
+### 세션 4/5 BLOCK 이슈 — 현재 상태 (검증 완료)
 
-**C2 — `frontend/src/app/page.tsx:22`**  
-`getTodayMatchups()` 반환 타입 `MatchupSummary[]`을 `as MatchupDetail[]` 캐스팅  
-→ expand 시 `home_scores`/`away_scores`/`chemistry` 런타임 오류  
-해결 방법: MatchupCard 열 때 `/api/matchup/{id}` 별도 fetch (권장)
+PR #1 (`726a3ea`) + 이후 커밋 (`e31c3c1`, `f4fba33`) + 이번 사후 리뷰로 대부분 해소됨. 세션 7 에서 **실기동 + 코드 확인만** 필요한 항목:
 
-**C3 — `frontend/src/app/page.tsx:27`**  
-`formatDateKo("2026-04-13")` 날짜 하드코딩 → `new Date()` 또는 API `date` 필드 사용
+| ID | 상태 | 비고 |
+|---|---|---|
+| C1 (`api.ts \|\| true`) | ✅ | grep 결과 0 hit |
+| C2 (`as MatchupDetail` 캐스팅) | ✅ | grep 결과 0 hit |
+| C3/I1/I6 (하드코딩 날짜) | ✅ | 로직 파일에 0 hit, `mockMatchups.ts` 의 시드 값만 남음 |
+| C4 (`game_time` / `series_label`) | ✅ | `backend/app/schemas/response.py:88-89` 존재 |
+| I3 (`chemistry_score ge/le`) | ✅ | `response.py:63,87` 존재 |
+| I4 (IN 배치 로드) | ✅ | `routers/matchup.py:114,129,144` `.in_(pitcher_ids)` |
+| I2 (인라인 스타일 → Tailwind) | ⚠️ **partial** | `page.tsx:46` 가 `style={{}}` 대신 arbitrary value `text-[#0A192F]` 로 이동. inline 은 제거됐지만 토큰화 안 됨. `tailwind.config.ts` 에 `ink.title` 같은 토큰 추가 후 `text-ink-title` 로 재작업 권장 (nit 수준) |
+| C5 (`PitcherProfile` 타입 정렬) | ❌ **미해결** | `frontend/src/types/index.ts:114-119` — `PitcherProfile` 가 여전히 `hand: string \| null` / `scores: PitcherScores \| null` 로 되어 있고 백엔드 `PitcherDetail`(`face_scores` + `today_fortune` 분리) 과 불일치. 사용처가 있는지 먼저 grep 하고, 없으면 `PitcherDetail` 로 통합/삭제 |
+| D-8 (360px 모바일 smoke test) | ❓ | 별도 커밋 증적 없음. 세션 7 에서 `npm run dev` 후 실기동 확인 |
 
-**C4 — `frontend/src/types/index.ts:43-44`**  
-`MatchupSummary.game_time`, `series_label` — 백엔드 스키마에 없는 필드  
-→ 백엔드 `MatchupSummary`에 추가하거나 프론트 타입에서 제거 (백엔드 추가 권장)
+### Stop hook 보강 (별도 follow-up)
 
-**C5 — `frontend/src/types/index.ts:114-119`**  
-`PitcherProfile.hand` — 백엔드 없음, `scores: PitcherScores | null` — 백엔드는 `face_scores` + `today_fortune` 분리  
-→ `PitcherProfile` 을 `PitcherDetail`과 정렬하거나 삭제
+`.claude/hooks/code-reviewer-gate.sh` 는 `git diff --name-only HEAD` 로 working tree 만 보기 때문에, commit 직후 stop 턴은 항상 clean → silent pass. 다음 중 하나로 보강:
 
-#### 🟡 WARNING
+- [ ] **H1** 현재 브랜치의 `git diff origin/main...HEAD --name-only` 도 함께 보고, 리뷰 마커 (`.claude/.last-reviewed-hash`) 에 커밋 해시도 포함시켜 "해당 커밋이 리뷰된 적 있는지" 판단
+- [ ] 또는 **H2** 세션 마지막 턴이 `git commit` / `git push` 를 포함하면 명시적으로 code-reviewer 호출을 요구하는 차단 규칙 추가
 
-**I1 — `history/page.tsx:21`** — `yesterday()` 내 `new Date("2026-04-13")` 하드코딩 → `new Date()`
-
-**I2 — `page.tsx:47,54`** — `style={{ color: "#0A192F" }}` 등 인라인 스타일 → Tailwind 커스텀 색상 토큰 사용
-
-**I3 — `response.py:87`** — `MatchupSummary.chemistry_score` Field에 `ge=0.0, le=4.0` 누락
-
-**I4 — `matchup.py:123-157`** — face/fortune 점수 4개 개별 쿼리 → `IN` 배치 로드 미적용
-
-**I5 — `api.ts:71`** — `getHistory()` 가 `HistoryResponse` 객체를 배열로 반환 (`.matchups` 언래핑 누락)
-
-**I6 — `history/page.tsx:83`** — `max="2026-04-12"` 하드코딩 → `new Date().toISOString().split("T")[0]`
-
-#### 🟢 NITS
-- `ScoreBar.tsx:16` `maxScore` prop 미사용 dead parameter
-
-### 다음 세션 작업 순서
-
-1. staged 파일 커밋 + 푸시
-2. `react-ui-dev` 에이전트에 C1~C3, I1~I2, I5~I6 프론트엔드 이슈 수정 위임
-3. `fastapi-backend-dev` 에이전트에 C4(백엔드 game_time/series_label 추가), I3, I4 위임 — **병렬 실행 가능**
-4. `code-reviewer` 게이트 통과 확인
-5. 이후 Phase 5 미구현 항목:
-   - 브라우저 실기동 테스트 (360px 모바일 뷰포트)
-   - PitcherPage 투수 프로필 완성 (face_scores + today_fortune 분리 구조)
-   - 히스토리 페이지 실제 날짜 date picker 동작 확인
-   - Share card (PNG 저장) 기능 — Phase 6 범위
+이번 세션에서는 fix 자체만 수행, hook 보강은 미뤘음.
 
 ---
 
@@ -157,28 +141,30 @@ git push
 
 ### B. Phase 2 AI 실검증 (blocker — 배포 전 필수)
 
-- [ ] `.env` 에 `ANTHROPIC_API_KEY` → 파이프라인 실행 검증
-- [ ] 고아 score row 문제 — Vision 성공 + Text 실패 시 savepoint
-- [ ] `analyze_and_score_matchups` except 분기 — Claude mock + rollback 유닛 테스트
+- [ ] **B-1** `.env` 에 `ANTHROPIC_API_KEY` → 파이프라인 실행 검증 (캐시 미스 경로)
+- [ ] **B-2** 고아 score row 문제 — Vision 성공 + Text 실패 시 savepoint
+- [ ] **B-3** `analyze_and_score_matchups` except 분기 — Claude mock + rollback 유닛 테스트
 
 ### C. 운영 잔여 (non-blocker)
 
-- [ ] `_append_review` dedup, concurrency
-- [ ] `publish_matchups` — `is_published.is_(False)` 필터 추가
-- [ ] `analyze_and_score_matchups` — pitcher `IN [...]` 배치 로드
+- [ ] **C-1** `_append_review` dedup, concurrency
+- [ ] **C-2** `publish_matchups` — `is_published.is_(False)` 필터 추가
+- [x] **C-3** `analyze_and_score_matchups` — pitcher `IN [...]` 배치 로드 (matchup 라우터 경로는 `f4fba33` 에서 이미 완료, 서비스 레이어에도 동일 패턴 적용 필요 시 다시 열기)
 - [x] Alembic 도입 — 세션 5 완료 (`backend/alembic/`, init_db.py 전환)
 
-### D. Phase 5 프론트엔드 잔여
+### D. Phase 5 프론트엔드 잔여 (세션 4/5 BLOCK 후속)
 
-- [ ] **D-1 (CRITICAL)** api.ts `|| true` 제거 (C1)
-- [ ] **D-2 (CRITICAL)** page.tsx 타입 캐스팅 수정 + expand 시 matchup detail fetch (C2)
-- [ ] **D-3** 하드코딩 날짜 전부 동적으로 교체 (C3, I1, I6)
-- [ ] **D-4** 인라인 스타일 → Tailwind 토큰 (I2)
-- [ ] **D-5** api.ts getHistory() `.matchups` 언래핑 (I5)
-- [ ] **D-6** 백엔드 MatchupSummary에 game_time/series_label 추가 (C4)
-- [ ] **D-7** PitcherProfile 타입 PitcherDetail과 정렬 (C5)
+- [x] **D-1~D-6** C1/C2/C3/I1/I6/C4/I3/I4/I5 — PR #1 + 후속 커밋으로 해소
+- [ ] **D-4 (partial)** I2 Tailwind 토큰화 (arbitrary value → 토큰, nit)
+- [ ] **D-7** `PitcherProfile` 타입 `PitcherDetail` 과 정렬 (또는 dead type 삭제)
 - [ ] **D-8** 360px 모바일 뷰포트 실기동 테스트
 - [x] **D-9** Share card PNG 생성 — `@vercel/og` Edge route + ShareButton (세션 5)
+
+### E. 사후 리뷰 Nits (세션 6 → 7 이월)
+
+- [ ] **N1** `models/matchup.py` `server_default=text("0")`
+- [ ] **N2** `scripts/init_db.py` URL 중복 주입 제거
+- [ ] **N3** `components/ScoreBar.tsx` 미사용 `maxScore` prop 제거
 
 ---
 

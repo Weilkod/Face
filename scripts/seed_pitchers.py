@@ -6,7 +6,13 @@ preferred, namuwiki as fallback).
 
 Idempotent — existing rows (matched by (name, team)) are updated in place.
 
+Prerequisite: the DB schema must already exist. Run `python scripts/init_db.py`
+first so Alembic applies `upgrade head`. This script intentionally does NOT
+call `Base.metadata.create_all` — Alembic is the single source of truth for
+schema and bypassing it would leave `alembic_version` un-stamped.
+
 Usage (from repo root):
+    python scripts/init_db.py      # once, to create tables
     python scripts/seed_pitchers.py
 """
 from __future__ import annotations
@@ -24,7 +30,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from sqlalchemy import select  # noqa: E402
 
-from app.db import SessionLocal, engine, Base  # noqa: E402
+from app.db import SessionLocal, engine  # noqa: E402
 from app import models  # noqa: E402,F401
 from app.models import Pitcher  # noqa: E402
 
@@ -98,9 +104,6 @@ async def main() -> int:
 
     signs = json.loads(CONSTELLATIONS_PATH.read_text(encoding="utf-8"))["signs"]
     photo_map = load_manifest_photo_map()
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
     inserted = 0
     updated = 0

@@ -79,9 +79,9 @@
 
 ---
 
-## 현재 상태 (세션 8 기준, 2026-04-14)
+## 현재 상태 (세션 10 기준, 2026-04-14)
 
-§B (Phase 2 AI 실검증) **완료**. 배포 이전 남은 blocker 는 더 이상 없음 — Phase 6 배포 작업, H1/H2 stop hook 보강, D-4 partial 토큰화, A-5/A-6 크롤러 nice-to-have 가 잔여.
+main=`14c7e20`. 세션 10 에서 PR #7/#8/#9/#10/#11 연속 처리. **배포 이전 blocker 없음** — Phase 6 실 배포(Vercel/Railway) + C1 srId 라이브 검증 + I3 APScheduler 싱글톤 가드가 남은 잔여. H1 stop hook 보강은 PR #8 에서 완료되어 이월 목록에서 제거됨 (H2 는 embedded SHA 로 기능 대체 판단, 정식 deferred). D-4 tailwind 토큰화는 PR #9 완료.
 
 세션 8 산출물 (브랜치 `claude/session-8-ai-validation`):
 - **B-1** 캐시 미스→히트 경로 실검증. `scripts/verify_ai_pipeline.py` 가 `pitcher_id=1,2` 의 profile_photo 를 manifest KBO URL 로 override 한 뒤 face/fortune 을 1회씩 실호출, 두번째 호출에서 캐시 히트(Claude 호출 0회)를 row count assertion 으로 검증. 4번의 실 Claude 호출(Vision×2 + Text×2) 모두 200 OK, 토큰 사용 로그 적재됨. score_matchup() 통합도 정상.
@@ -108,6 +108,12 @@
   · **Important — type annotation drift**: `match_pitcher_by_kbo_id(kbo_player_id: int)` 가 body 에서 `None` 을 가드하고 있었음 → `Optional[int]` 로 수정, 직접 None 입력 케이스 테스트 추가.
   · **Coverage gap — upsert fill-blank**: `upsert_schedule` 의 kbo_id fill-blank / no-overwrite 분기가 테스트 0건이었음 → 3개 테스트 추가 (insert 시 저장, update 시 NULL 슬롯 채우기, 확정된 id 덮어쓰지 않음).
   · **Nit — match_pitcher_by_kbo_id(None) 명시 테스트**: 추가 완료 (위 카운트 포함). A-6 eager harvester 는 lazy write-back 이 기존 시드 풀을 커버하므로 우선순위 낮아져 deferred.
+- **외부 리뷰 대응 (PR #11 merged, main 14c7e20)** — 다른 세션의 code-reviewer 가 A-5 에 대해 Critical 2 / Important 2 / Nit 3 으로 BLOCK 의견을 냈으나, 각 항목을 현재 main 에 대조한 결과 유효한 건 **N3 (로그 레벨) 만 1건**. 나머지는 stale 또는 false positive:
+  · **C1 srId 값** (Critical) — `crawler.py:266` `"srId": "0,1,3,4,5,7"` vs CLAUDE.md §5 스펙 `0,9,6` 불일치. 유효하지만 어느 값이 실제 KBO 응답과 맞는지 라이브 검증 필수 → 세션 11 로 이월 (`kbo-data-crawler` 사용).
+  · **C2 write-back rollback** (Critical) — "per-game try 안에 있어서 실패 시 write-back 이 사라진다" 는 지적은 버그 아닌 의도된 trade-off. `daily_schedules.home_starter_kbo_id` 는 upsert_schedule 에서 별도 commit 되어 DB 에 남아있으므로 다음 스케줄러 런이 같은 row 를 재읽고 재시도 → "학습 지연" 이지 "학습 소실" 이 아님. 또 "충돌 시 WARNING 로그 only, review queue 누락" 부분은 038aaa2 에서 해당 conflict 경로 자체가 삭제됐으므로 stale.
+  · **I1 인덱스 중복 선언** (Important) — **실측 반증.** 모델 `unique=True, index=True` 로 `Base.metadata.create_all` 결과가 `CREATE UNIQUE INDEX ix_pitchers_kbo_player_id ON pitchers(kbo_player_id)` 로 alembic 0002 의 `create_index(..., unique=True)` 와 완전히 동일한 DDL 생성. 테스트로 확인 완료 (`scratch /tmp/drift_check.db`). Dual declaration 은 의도된 패턴이며, 모델에서 제거 시 오히려 `create_all` 이 인덱스를 안 만들어 **역방향 drift** 발생.
+  · **I2 타입 어노테이션 / N1 existing_owner / N2 dead code guard** — 모두 038aaa2 (PR #10 의 fix commit) 에서 이미 해소된 stale 지적.
+  · **N3 로그 레벨** (유효) — `scheduler.py:156` `logger.info` → `logger.debug`. 콜드 스타트 ~10회 후 idempotent 이므로 DEBUG 가 적절. 1줄 수정, PR #11 로 별도 처리.
 
 세션 9 산출물 (브랜치 `claude/session-9-phase6-deploy`):
 - **Phase 6 sub-task 4** — 배포 스켈레톤 도입. 로드맵 §Phase 6 의 첫 빌딩블록.
@@ -128,42 +134,45 @@
 
 ---
 
-## [WPI] 세션 10 인계 (2026-04-14)
+## [WPI] 세션 11 인계 (2026-04-14)
 
 ### 시작 상태
-- 세션 9 PR(Phase 6 배포 스켈레톤) 머지 여부 먼저 확인. 머지됐으면 `main` 에서 새 브랜치 분기.
-- 로컬 `docker` CLI 가 없어 세션 9 는 YAML/import/pytest/next build 수준만 검증. 실 `docker build` 는 PR CI 가 최초 확인.
-- 세션 8 키 로테이션은 완료. `backend/.env` 정상 상태.
+- main=`14c7e20`. 세션 10 에서 PR #7/#8/#9/#10/#11 모두 머지 완료. CI 전부 green, stop hook H1 실사용 1회 이상 (PR #10 fix 사이클에서 작동 확인).
+- 세션 8 키 로테이션 완료, `backend/.env` 정상.
+- 로컬 `docker` CLI 아직 없음 — compose 실 smoke 는 여전히 미검증.
+- `backend/app/services/crawler.py:266` 의 `srId=0,1,3,4,5,7` 이 CLAUDE.md §5 스펙 `0,9,6` 과 불일치한 채로 main 에 남아있음. **A-5 매처는 이 값을 전제로 구현돼 있으므로 값이 틀렸다면 매칭이 안 되는 시즌이 올 수 있음** — 첫 턴 검증 권장.
+- README.md 에 `kbo_player_id` / daily_schedules kbo_id 컬럼 스키마 문서가 사용자 손으로 추가됨 (PR #11 시점 로컬 dirty, 사용자가 직접 커밋 예정 → 세션 11 시작 시 `git log` 로 반영 여부 확인 후 pull).
 
-### 첫 턴에 할 일
-1. 세션 9 PR GitHub Actions 결과 확인 — `backend`/`frontend` job 둘 다 green 인지.
-2. 다음 중 하나로 진행:
-   - **Phase 6 실 배포** — Vercel FE + Railway/Fly BE. Postgres 프로비저닝 + `DATABASE_URL` asyncpg 전환 + `ANTHROPIC_API_KEY` secret + APScheduler 싱글톤 보장.
-   - **Docker 실 smoke** — `docker compose up` 엔드투엔드(/health + /api/today). sqlite 바인드 마운트 동작 확인.
-   - **H1/H2 Stop hook 보강** — 구조적 silent-pass 재발 방지. 여전히 이월.
-   - **D-4 partial Tailwind 토큰화** — `page.tsx:46` 의 `text-[#0A192F]` → `text-ink-title`. 1줄 nit.
-   - **A-5/A-6 크롤러 nice-to-have** — `pitchers.kbo_player_id` 컬럼 + matcher + seed 수확기. Alembic 마이그레이션 동반.
+### 첫 턴에 할 일 (권장 순서)
 
-### Stop hook 보강 (계속 이월)
+**1. C1 srId 라이브 검증** (blocker 여부 결정) — `kbo-data-crawler` 에이전트에 위임.
+   - 현재 코드값 `0,1,3,4,5,7` 과 CLAUDE.md 스펙값 `0,9,6` 을 **둘 다** 실 KBO `POST /ws/Main.asmx/GetKboGameList` 로 호출, 응답의 1군 정규시즌 경기 수 + 퓨처스 혼입 여부를 대조.
+   - 결론에 따라 코드 또는 CLAUDE.md 중 한 쪽을 수정 → A-5 매처의 정확성 보장.
+   - 이건 라이브 호출이므로 별도 세션에서 시간 여유 두고 처리하는 게 안전.
 
-`.claude/hooks/code-reviewer-gate.sh` 가 `git diff --name-only HEAD` 만 보기 때문에 commit 직후 stop 턴은 항상 clean → silent pass. 다음 중 하나로 보강:
+**2. Phase 6 실 배포** (Vercel FE + Railway/Fly BE) — 배포 직전 반드시 선행할 작업:
+   - **I3 APScheduler 싱글톤 가드** (`backend/app/main.py:17-18` lifespan 이 무조건 scheduler 기동). replicas ≥ 2 환경에서 크롤/분석/퍼블리시 잡이 중복 실행되어 `fortune_scores` 중복 write + Claude 토큰 2배 소모 위험. `SCHEDULER_ENABLED` 플래그 또는 "scheduler 전용 워커 프로세스" 분리 필수.
+   - Postgres 프로비저닝 + `DATABASE_URL` asyncpg 전환 + `ANTHROPIC_API_KEY` secret 주입.
+   - OG route edge runtime 검증 (`@vercel/og` 이 Vercel 환경에서 실제 PNG 반환하는지).
+   - **I2 bind-mount uid 불일치** 는 compose 로컬 smoke 전에만 유의, 실 배포는 영향 없음.
 
-- [ ] **H1** 현재 브랜치의 `git diff origin/main...HEAD --name-only` 도 함께 보고, 리뷰 마커에 커밋 해시 포함
-- [ ] **H2** 세션 마지막 턴이 `git commit/push` 를 포함하면 명시적으로 code-reviewer 호출 요구
+**3. Docker 실 smoke** — 로컬 `docker` CLI 설치 후 `docker compose up` 엔드투엔드. I2 uid 가이드 (`sudo chown -R 1000 ./data` 또는 `--user $(id -u)`) 준수 필요.
 
-세션 8 도 수동으로 `code-reviewer` 서브에이전트를 커밋 전에 호출해서 보완했지만 구조적 개선은 여전히 미뤄진 상태.
+**4. A-6 / A-7 nice-to-have** — `seed_pitchers.py` KBO 프로필 수확기. A-5 의 lazy write-back 이 이미 기존 시드 풀을 커버하므로 신규 시드 전용이며 우선순위 낮음.
 
-세션 4/5 BLOCK 잔여 중 아직 열려 있는 항목:
-- **I2 Tailwind 토큰화 (D-4 partial)** — nit 수준.
+### 구조적 개선 현황
+- [x] **H1** `.claude/hooks/code-reviewer-gate.sh` 가 `git diff --name-only origin/main...HEAD` 브랜치-레벨 diff 로 post-commit silent-pass 차단. 마커 `<contenthash>@<shortsha>` 포함 (PR #8, 세션 10).
+- [ ] **H2** "세션 마지막 턴이 git commit/push 를 포함하면 code-reviewer 호출" — H1 마커에 SHA 가 embed 돼서 같은 커밋이 두 번 리뷰되지 않는 효과를 얻었으므로 정식 deferred (재도입 시 검토).
 
 ---
 
 ## 진행 중 TODO
 
-### A. 크롤러 마무리 (nice-to-have)
+### A. 크롤러 마무리
 
-- [x] **A-5.** `pitchers.kbo_player_id` + `daily_schedules.home/away_starter_kbo_id` 컬럼, `match_pitcher_by_kbo_id()` 헬퍼, 스케줄러 ID-first 분기 + lazy write-back (세션 10). Alembic 0002 roundtrip clean, pytest 8/8.
+- [x] **A-5.** `pitchers.kbo_player_id` + `daily_schedules.home/away_starter_kbo_id` 컬럼, `match_pitcher_by_kbo_id()` 헬퍼, 스케줄러 ID-first 분기 + lazy write-back (세션 10, PR #10). Alembic 0002 roundtrip clean, pytest 12/12. Write-back 로그는 PR #11 에서 DEBUG 로 하향.
 - [ ] **A-6.** `seed_pitchers.py` KBO 프로필 수확기 — A-5 의 lazy write-back 이 기존 시드 투수를 이미 커버. 신규 시드 투수 초기 freshness 전용으로 우선순위 낮음.
+- [ ] **A-7 (신규).** `crawler._fetch_kbo` `srId` 값 라이브 검증 — 코드 `0,1,3,4,5,7` vs CLAUDE.md 스펙 `0,9,6` 불일치. 실 KBO API 응답으로 정답 결정 후 한 쪽 수정. 세션 11 첫 턴 권장 (`kbo-data-crawler`).
 
 ### B. Phase 2 AI 실검증 ✅ (세션 8 완료)
 
@@ -181,7 +190,7 @@
 ### D. Phase 5 프론트엔드 잔여 (세션 4/5 BLOCK 후속)
 
 - [x] **D-1~D-6** C1/C2/C3/I1/I6/C4/I3/I4/I5 — PR #1 + 후속 커밋으로 해소
-- [ ] **D-4 (partial)** I2 Tailwind 토큰화 (arbitrary value → 토큰, nit)
+- [x] **D-4 (partial)** I2 Tailwind 토큰화 — `tailwind.config.ts` 에 `ink.title: "#0A192F"` 토큰 신규 추가 후 `page.tsx:46` 리팩터 (세션 10, PR #9)
 - [x] **D-7** `PitcherProfile` 삭제 → `PitcherDetail` 통합 (세션 7, 프론트 어댑터 레이어)
 - [x] **D-8** 360px 모바일 뷰포트 smoke test — dev 서버 + 3 경로 200 + 정적 분석 + 사용자 로컬 DevTools 육안 검수 통과 (세션 7)
 - [x] **D-9** Share card PNG 생성 — `@vercel/og` Edge route + ShareButton (세션 5)

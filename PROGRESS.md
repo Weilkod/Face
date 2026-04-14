@@ -98,20 +98,38 @@
 세션 7 산출물 (참고):
 - PR #4/#5 (`claude/session-7-nits-and-d7`) — N1+N2+N3 / D-7 / D-8 / alembic.ini cp949 fix.
 
+세션 9 산출물 (브랜치 `claude/session-9-phase6-deploy`):
+- **Phase 6 sub-task 4** — 배포 스켈레톤 도입. 로드맵 §Phase 6 의 첫 빌딩블록.
+  · `backend/Dockerfile` — `python:3.12-slim` + tini, non-root(uid 1000), `PYTHONPATH=/app/backend`, 엔트리가 `scripts/init_db.py`(alembic upgrade head) 후 uvicorn 기동. 이미지에 `.env` 미포함(런타임 env vars 만 의존).
+  · `frontend/Dockerfile` — node 20-alpine 멀티스테이지(deps → builder → runner), non-root, `next start -H 0.0.0.0`. 주 배포 타깃은 Vercel(CLAUDE.md §1) 이라 이 파일은 로컬 compose 용.
+  · `docker-compose.yml` — backend(8000) + frontend(3000), `./data:/app/data` 바인드 마운트로 sqlite 퍼시스트, `DATABASE_URL` 절대경로 주입(`sqlite+aiosqlite:////app/data/facemetrics.db`), `env_file.required=false` 로 `.env` 미존재 허용. 향후 Postgres 추가 여지 있음.
+  · `.dockerignore` — 루트 단일 파일. `.venv`/`node_modules`/`.next`/`data/*.db`/`**/.env`/docs 제외.
+  · `.github/workflows/ci.yml` — PR + main push 트리거, concurrency cancel-in-progress. backend job: py 3.12, pip cache, `scripts/init_db.py`(alembic head), import smoke, `pytest backend/tests -v`. frontend job: node 20, npm cache, `npm run type-check`, `npm run build`.
+- **검증**: `python -m pytest backend/tests -v` → 3 passed, `PYTHONPATH=backend python -c "from app.main import app"` OK, `python scripts/init_db.py`(임시 sqlite) alembic upgrade head 성공, `npm run type-check` clean, `npm run build` clean (5 routes, standalone output 생성 확인). docker-compose/ci.yml YAML parse OK. 실제 `docker build` 는 로컬에 docker CLI 없어 미검증 — PR CI 에서 실행 예정.
+- **code-reviewer 라운드**: Verdict APPROVE WITH FIXES (Critical 0 / Important 4 / Nits 6). 커밋 전 다음 수정 반영:
+  · **I1 CI DATABASE_URL 스코핑** — workflow-level env 에서 제거하고 alembic 스텝에만 `${{ github.workspace }}/data/facemetrics.db` 절대경로 주입. pytest 는 `backend/tests/conftest.py:26` 가 `os.environ["DATABASE_URL"]` 로 임시 파일을 무조건 덮어쓰므로 workflow env 오염 위험 차단.
+  · **I4 Next standalone output** — `next.config.mjs` 에 `output: 'standalone'` 추가, `frontend/Dockerfile` runner 스테이지를 `.next/standalone` + `.next/static` + `public` 만 복사하도록 축소(이미지 ~500MB → ~150MB 수준). CMD 도 `node server.js` 로 변경. 재빌드 검증 `npm run build` clean.
+  · **N2 tini 신호 전파** — `ENTRYPOINT ["tini", "-g", "--"]` (프로세스 그룹에 신호 전달) + CMD 의 uvicorn 앞에 `exec` 추가. `docker stop` 시 SIGTERM 이 uvicorn 까지 즉시 도달.
+- **이월 (세션 10 처리)**:
+  · **I2 bind-mount uid 불일치** — `./data:/app/data` + uid 1000 non-root. Linux 호스트의 실 유저 uid 가 1000 이 아니면 sqlite write EACCES. compose smoke 실행 전 `sudo chown -R 1000 ./data` 또는 `docker compose run --user $(id -u)` 안내 필요.
+  · **I3 APScheduler 싱글톤** — `backend/app/main.py:17-18` lifespan 이 무조건 scheduler 기동. Railway/Fly 에서 replicas ≥ 2 이면 크롤/분석/퍼블리시 잡이 두 번 실행되어 `fortune_scores` 중복 write + Claude 토큰 2배 소모. 실 배포(세션 10) 전 `SCHEDULER_ENABLED` 플래그 또는 "scheduler 전용 워커 프로세스" 분리 필요.
+  · **N1 compose 버전 요구사항** — `env_file.path/required` long-form 은 Compose v2.24+ (Jan 2024). 구버전은 파싱 실패.
+
 ---
 
-## [WPI] 세션 9 인계 (2026-04-14)
+## [WPI] 세션 10 인계 (2026-04-14)
 
 ### 시작 상태
-- 세션 8 PR 머지 여부 먼저 확인. 머지됐으면 `main` 에서 새 브랜치 분기.
-- §B 모두 완료 — `.env` 에 `ANTHROPIC_API_KEY` 가 들어 있는 상태로 `verify_ai_pipeline.py` 와 `pytest backend/tests/` 가 재현 가능.
-- 잔여물 정리: `.venv/`, `data/facemetrics.db` (실 Claude 응답이 캐시됨), `/tmp/facemetrics_b3_test.db` 는 일회성 — 세션 9 시작 시 필요 없으면 삭제.
+- 세션 9 PR(Phase 6 배포 스켈레톤) 머지 여부 먼저 확인. 머지됐으면 `main` 에서 새 브랜치 분기.
+- 로컬 `docker` CLI 가 없어 세션 9 는 YAML/import/pytest/next build 수준만 검증. 실 `docker build` 는 PR CI 가 최초 확인.
+- 세션 8 키 로테이션은 완료. `backend/.env` 정상 상태.
 
 ### 첫 턴에 할 일
-1. 세션 8 PR 상태 확인 → 분기 전략 결정.
+1. 세션 9 PR GitHub Actions 결과 확인 — `backend`/`frontend` job 둘 다 green 인지.
 2. 다음 중 하나로 진행:
-   - **Phase 6 배포 스켈레톤** (Recommended) — Dockerfile, docker-compose, GitHub Actions CI yml. README §8 / Phase 6 로드맵의 첫 단계.
-   - **H1/H2 Stop hook 보강** — 구조적 silent-pass 재발 방지. (세션 6/8 에서 우회 발생, 매번 수동 호출 필요)
+   - **Phase 6 실 배포** — Vercel FE + Railway/Fly BE. Postgres 프로비저닝 + `DATABASE_URL` asyncpg 전환 + `ANTHROPIC_API_KEY` secret + APScheduler 싱글톤 보장.
+   - **Docker 실 smoke** — `docker compose up` 엔드투엔드(/health + /api/today). sqlite 바인드 마운트 동작 확인.
+   - **H1/H2 Stop hook 보강** — 구조적 silent-pass 재발 방지. 여전히 이월.
    - **D-4 partial Tailwind 토큰화** — `page.tsx:46` 의 `text-[#0A192F]` → `text-ink-title`. 1줄 nit.
    - **A-5/A-6 크롤러 nice-to-have** — `pitchers.kbo_player_id` 컬럼 + matcher + seed 수확기. Alembic 마이그레이션 동반.
 
@@ -167,4 +185,11 @@
 
 ## Phase 6 로드맵
 
-- docker-compose, 면책 고지, Vercel + Railway 배포, GitHub Actions 게이트, 공유 카드 PNG
+- [x] 공유 카드 PNG — 세션 5 `@vercel/og` Edge route
+- [x] Alembic 도입 — 세션 5
+- [x] Dockerfile × 2 + docker-compose + GitHub Actions CI 스켈레톤 — 세션 9
+- [ ] 실 `docker build` 및 compose up 엔드투엔드 smoke (로컬 docker CLI 필요)
+- [ ] Vercel 배포(FE) — 환경변수 `NEXT_PUBLIC_API_BASE` 설정, OG route edge runtime 검증
+- [ ] Railway/Fly 배포(BE) — Postgres 프로비저닝 + `DATABASE_URL` 주입, `ANTHROPIC_API_KEY` secret, APScheduler 싱글톤 보장
+- [ ] 면책 고지 최종 copy review (엔터테인먼트 목적, 베팅 무관)
+- [ ] CI 게이트 강화 — PR 에서 alembic downgrade base → upgrade head 라운드트립 추가 검토

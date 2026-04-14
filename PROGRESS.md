@@ -17,9 +17,9 @@
   FastAPI 스캐폴딩, 5 테이블 DB, 투수 10명 시드, init/seed 스크립트  
   ⚠️ Python 3.14 + SQLAlchemy ≥ 2.0.49 필수 (`Mapped[Optional[str]]`, `__future__` 없음)
 
-- [x] **Phase 2** — AI 엔진 ✅ (2026-04-13)  
+- [x] **Phase 2** — AI 엔진 ✅ (2026-04-13, 실검증 2026-04-14 세션 8)  
   관상(Claude Vision) + 운세(Claude Text) + 상성(룰 기반) + scoring_engine  
-  ⚠️ Claude API 키 없이는 캐시 미스 경로 미검증 상태 — §B 필수
+  세션 8 §B 에서 실 Claude API 캐시 미스/히트 경로 + atomic rollback 모두 검증 완료
 
 - [x] **Phase 3 sub-task 1** — 크롤러 read-only ✅ (2026-04-13)  
   KBO `GetKboGameList` 단일 소스, `/ws/` robots carve-out, 이름 매처
@@ -79,53 +79,54 @@
 
 ---
 
-## 현재 상태 (세션 7 기준, 2026-04-14)
+## 현재 상태 (세션 8 기준, 2026-04-14)
 
-세션 6 사후 리뷰 잔여 (N1/N2/N3) + 세션 4/5 BLOCK 잔여 (D-7 `PitcherProfile` 타입 정렬, D-8 360px 모바일 smoke) 모두 완료. N1/N2 는 Korean Windows (cp949) 환경에서 alembic 이 `alembic.ini` 를 읽을 때 `UnicodeDecodeError` 로 터지던 pre-existing 인코딩 버그 (L25 em dash) 까지 제거한 뒤 실기동 검증 완료.
+§B (Phase 2 AI 실검증) **완료**. 배포 이전 남은 blocker 는 더 이상 없음 — Phase 6 배포 작업, H1/H2 stop hook 보강, D-4 partial 토큰화, A-5/A-6 크롤러 nice-to-have 가 잔여.
 
-**배포 이전 남은 blocker 는 §B (AI 실검증) 뿐이며, 나머지는 nits/운영 잔여/Phase 6 배포 작업.**
+세션 8 산출물 (브랜치 `claude/session-8-ai-validation`):
+- **B-1** 캐시 미스→히트 경로 실검증. `scripts/verify_ai_pipeline.py` 가 `pitcher_id=1,2` 의 profile_photo 를 manifest KBO URL 로 override 한 뒤 face/fortune 을 1회씩 실호출, 두번째 호출에서 캐시 히트(Claude 호출 0회)를 row count assertion 으로 검증. 4번의 실 Claude 호출(Vision×2 + Text×2) 모두 200 OK, 토큰 사용 로그 적재됨. score_matchup() 통합도 정상.
+- **B-2** caller-managed transaction 으로 전환. `face_analyzer.get_or_create_face_scores` / `fortune_generator.get_or_create_fortune_scores` 의 내부 `commit/refresh` → `flush` 로 교체. 호출자가 트랜잭션 경계 책임. 후속 영향:
+  · `scheduler.analyze_and_score_matchups` 의 외층 try/commit/rollback 이 매치업 1건을 진짜 atomic 하게 묶음 — face × 2 + fortune × 2 + matchup × 1 이 한 트랜잭션.
+  · `admin.analyze_face` 와 `admin.generate_fortune` 에 명시적 `await session.commit()` / `rollback()` 추가 (generate_fortune 은 부분 성공 의미 보존 위해 per-iteration commit).
+- **B-3** rollback 유닛 테스트 — `backend/tests/test_analyze_rollback.py` 3건:
+  · `test_happy_path_persists_all_rows` — mock 으로 face/fortune 모두 성공 → face×2 + fortune×2 + matchup×1 검증.
+  · `test_fortune_failure_rolls_back_face_rows` — face 성공 + Claude Text + hash fallback 모두 raise → 모든 행 0 (B-2 회귀 가드).
+  · `test_face_failure_rolls_back_cleanly` — Claude Vision + hash fallback 모두 raise → 모든 행 0.
+  실행: `pytest backend/tests/ -v` → 3 passed, 2.36s.
+- **부수 산출물** `backend/tests/conftest.py` (DATABASE_URL 임시 파일 주입), `scripts/verify_ai_pipeline.py` (재현 가능한 실 API 검증).
 
-세션 7 산출물:
-- PR #4 (`claude/session-7-nits-and-d7`) 5 커밋: N1+N2+N3 / D-7 / PROGRESS / D-8 확정 / alembic.ini cp949 fix.
+세션 7 산출물 (참고):
+- PR #4/#5 (`claude/session-7-nits-and-d7`) — N1+N2+N3 / D-7 / D-8 / alembic.ini cp949 fix.
 
 ---
 
-## [WPI] 세션 8 인계 (2026-04-14)
+## [WPI] 세션 9 인계 (2026-04-14)
 
 ### 시작 상태
-- PR #4 머지 여부를 먼저 확인. 머지됐으면 `main` 에서 신규 브랜치 분기, 아직이면 PR 리뷰/수정 이어가기.
-- `origin/main` 기준 (PR #4 전): 세션 6 완료 상태 (`d4418bd`).
-- `.env` 에 `ANTHROPIC_API_KEY` 여전히 없음 → §B 착수 전 반드시 확인.
-- 로컬 venv (`.venv/`) 및 `/tmp/facemetrics_n2_test.db` 는 세션 7 의 일회성 검증 부산물 — 세션 8 시작 시 필요 없으면 정리.
+- 세션 8 PR 머지 여부 먼저 확인. 머지됐으면 `main` 에서 새 브랜치 분기.
+- §B 모두 완료 — `.env` 에 `ANTHROPIC_API_KEY` 가 들어 있는 상태로 `verify_ai_pipeline.py` 와 `pytest backend/tests/` 가 재현 가능.
+- 잔여물 정리: `.venv/`, `data/facemetrics.db` (실 Claude 응답이 캐시됨), `/tmp/facemetrics_b3_test.db` 는 일회성 — 세션 9 시작 시 필요 없으면 삭제.
+- ⚠️ 세션 8 에서 사용자가 채팅으로 평문 키를 전달했음. **세션 9 시작 전 반드시 키 로테이션** 하고, 회전한 키를 `backend/.env` 에 다시 주입.
 
 ### 첫 턴에 할 일
-1. PR #4 상태 확인 후 브랜치 분기 전략 결정.
-2. §B 시작 여부 결정 — `.env` 에 `ANTHROPIC_API_KEY` 가 주입됐는지 먼저 확인. 없으면 사용자에게 요청, 주입되면 B-1 부터 순차 진행.
-3. §B 가 아직 막혀 있으면 Phase 6 배포 작업의 선행 준비 (Dockerfile, docker-compose, CI 설정 파일 스켈레톤) 로 전환하거나, D-4 partial / H1-H2 stop hook 보강 / A-5-A-6 크롤러 nice-to-have 같은 non-blocker 작업 정리.
-
-### 세션 7 에서 완료된 항목 (참고용)
-
-| ID | 상태 | 비고 |
-|---|---|---|
-| N1 `models/matchup.py` `server_default=text("0")` | ✅ | 세션 7 PR #4 |
-| N2 `scripts/init_db.py` URL 중복 주입 제거 | ✅ | 세션 7 PR #4, Python 3.12 + venv 로 `alembic upgrade head` 5 테이블 생성 실검증 |
-| N3 `components/ScoreBar.tsx` `maxScore` prop 제거 | ✅ | 세션 7 PR #4 |
-| C5 / D-7 `PitcherProfile` 타입 정렬 | ✅ | 세션 7 PR #4, mock 경로까지 `PitcherDetail` 로 통합, `tsc --noEmit` + `npm run build` clean |
-| D-8 360px 모바일 smoke | ✅ | `next dev` + 세 경로 200 + 정적 분석 + 사용자 로컬 DevTools 360×800 육안 검수 통과 |
-| alembic.ini cp949 fix | ✅ | L25 em dash → `--` 치환. Korean Windows 환경에서 `init_db.py` 가 돌아가게 됨 (pre-existing 인코딩 버그) |
-
-세션 4/5 BLOCK 잔여 중 아직 열려 있는 항목:
-
-- **I2 Tailwind 토큰화 (D-4 partial)** — `page.tsx:46` 의 arbitrary value `text-[#0A192F]` 를 `tailwind.config.ts` 에 `ink.title` 토큰 추가 후 `text-ink-title` 로 재작업. nit 수준.
+1. 세션 8 PR 상태 확인 → 분기 전략 결정.
+2. 다음 중 하나로 진행:
+   - **Phase 6 배포 스켈레톤** (Recommended) — Dockerfile, docker-compose, GitHub Actions CI yml. README §8 / Phase 6 로드맵의 첫 단계.
+   - **H1/H2 Stop hook 보강** — 구조적 silent-pass 재발 방지. (세션 6/8 에서 우회 발생, 매번 수동 호출 필요)
+   - **D-4 partial Tailwind 토큰화** — `page.tsx:46` 의 `text-[#0A192F]` → `text-ink-title`. 1줄 nit.
+   - **A-5/A-6 크롤러 nice-to-have** — `pitchers.kbo_player_id` 컬럼 + matcher + seed 수확기. Alembic 마이그레이션 동반.
 
 ### Stop hook 보강 (계속 이월)
 
-`.claude/hooks/code-reviewer-gate.sh` 는 `git diff --name-only HEAD` 로 working tree 만 보기 때문에, commit 직후 stop 턴은 항상 clean → silent pass. 다음 중 하나로 보강:
+`.claude/hooks/code-reviewer-gate.sh` 가 `git diff --name-only HEAD` 만 보기 때문에 commit 직후 stop 턴은 항상 clean → silent pass. 다음 중 하나로 보강:
 
-- [ ] **H1** 현재 브랜치의 `git diff origin/main...HEAD --name-only` 도 함께 보고, 리뷰 마커 (`.claude/.last-reviewed-hash`) 에 커밋 해시도 포함시켜 "해당 커밋이 리뷰된 적 있는지" 판단
-- [ ] 또는 **H2** 세션 마지막 턴이 `git commit` / `git push` 를 포함하면 명시적으로 code-reviewer 호출을 요구하는 차단 규칙 추가
+- [ ] **H1** 현재 브랜치의 `git diff origin/main...HEAD --name-only` 도 함께 보고, 리뷰 마커에 커밋 해시 포함
+- [ ] **H2** 세션 마지막 턴이 `git commit/push` 를 포함하면 명시적으로 code-reviewer 호출 요구
 
-세션 7 은 수동으로 `code-reviewer` 서브에이전트를 커밋 전에 호출해서 (CRITICAL/MAJOR 0, Minor 3 → 전부 반영) 보완했지만, 구조적 개선은 여전히 미뤄진 상태.
+세션 8 도 수동으로 `code-reviewer` 서브에이전트를 커밋 전에 호출해서 보완했지만 구조적 개선은 여전히 미뤄진 상태.
+
+세션 4/5 BLOCK 잔여 중 아직 열려 있는 항목:
+- **I2 Tailwind 토큰화 (D-4 partial)** — nit 수준.
 
 ---
 
@@ -136,11 +137,11 @@
 - [ ] **A-5.** `pitchers` 에 `kbo_player_id` 컬럼 추가 + `match_pitcher_by_kbo_id()` 헬퍼  
 - [ ] **A-6.** `seed_pitchers.py` 에 KBO 프로필 수확기 추가  
 
-### B. Phase 2 AI 실검증 (blocker — 배포 전 필수)
+### B. Phase 2 AI 실검증 ✅ (세션 8 완료)
 
-- [ ] **B-1** `.env` 에 `ANTHROPIC_API_KEY` → 파이프라인 실행 검증 (캐시 미스 경로)
-- [ ] **B-2** 고아 score row 문제 — Vision 성공 + Text 실패 시 savepoint
-- [ ] **B-3** `analyze_and_score_matchups` except 분기 — Claude mock + rollback 유닛 테스트
+- [x] **B-1** `.env` 에 `ANTHROPIC_API_KEY` → 파이프라인 실행 검증 — `scripts/verify_ai_pipeline.py` 로 캐시 미스/히트 경로 + score_matchup 통합 모두 실 Claude API 검증
+- [x] **B-2** 고아 score row 문제 — caller-managed transaction 으로 전환 (face/fortune `commit/refresh` → `flush`, 호출자 `commit/rollback`). `analyze_and_score_matchups` 가 매치업 1건을 atomic 하게 묶음
+- [x] **B-3** `analyze_and_score_matchups` rollback 테스트 — `backend/tests/test_analyze_rollback.py` 3건 (happy / fortune-fail / face-fail) → `pytest` 통과
 
 ### C. 운영 잔여 (non-blocker)
 

@@ -10,7 +10,14 @@ Flow:
     3. Call Claude Vision (claude-opus-4-6) with system prompt cached via ephemeral.
     4. Parse JSON → FaceAnalysisResult. On failure, retry once (temperature=0).
     5. On second failure or API error, use hash_face_scores fallback.
-    6. Insert FaceScore row, commit, return.
+    6. session.add() + session.flush() — caller owns the transaction and is
+       responsible for commit/rollback. This lets the analyze_and_score_matchups
+       pipeline atomically rollback face + fortune + matchup work as a unit.
+
+Note: flush() can raise IntegrityError on the unique (pitcher_id, season)
+constraint if a concurrent run already inserted the same row between this
+function's cache check and the flush. Callers handle this via their outer
+try/except — currently no caller retries.
 
 Implements README §3-2, §3-3, §4-1 and CLAUDE.md §2, §4.
 """
@@ -282,8 +289,7 @@ async def get_or_create_face_scores(
         )
         face_score = _build_face_score_from_fallback(pitcher.pitcher_id, season)
         session.add(face_score)
-        await session.commit()
-        await session.refresh(face_score)
+        await session.flush()  # populate PK; caller owns the transaction
         return face_score
 
     # 3. Call Claude Vision
@@ -310,6 +316,5 @@ async def get_or_create_face_scores(
             face_score_obj = _build_face_score_from_fallback(pitcher.pitcher_id, season)
 
     session.add(face_score_obj)
-    await session.commit()
-    await session.refresh(face_score_obj)
+    await session.flush()  # populate PK; caller owns the transaction
     return face_score_obj

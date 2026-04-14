@@ -383,8 +383,33 @@ def _clean_starter_name(raw) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
-# pitcher_id matcher (legacy name-based fallback — kept until A-5/A-6 land)
+# pitcher_id matchers — kbo_player_id is the preferred path, name fuzzy is
+# the fallback when the crawler couldn't get an id (GameCenter parse failure)
+# or the local pitcher row hasn't been associated with a kbo_id yet.
 # ---------------------------------------------------------------------------
+
+
+async def match_pitcher_by_kbo_id(
+    session: AsyncSession,
+    kbo_player_id: Optional[int],
+) -> Optional[int]:
+    """
+    Resolve a KBO playerId (from GetKboGameList) to a local pitcher_id.
+
+    Exact, unique lookup — no fuzzy path, no review queue append. This is
+    the preferred entry point; callers should fall back to
+    `match_pitcher_name` only when the id is missing or unresolved.
+    """
+    if kbo_player_id is None:
+        return None
+    stmt = select(Pitcher.pitcher_id).where(Pitcher.kbo_player_id == kbo_player_id)
+    result = await session.execute(stmt)
+    pid = result.scalar_one_or_none()
+    if pid is not None:
+        logger.debug(
+            "[crawler] kbo_id match: kbo=%d → pitcher_id=%d", kbo_player_id, pid
+        )
+    return pid
 
 
 async def match_pitcher_name(
@@ -525,6 +550,8 @@ async def upsert_schedule(
                     game_time=entry.game_time,
                     home_starter=entry.home_starter_name,
                     away_starter=entry.away_starter_name,
+                    home_starter_kbo_id=entry.home_starter_kbo_id,
+                    away_starter_kbo_id=entry.away_starter_kbo_id,
                     source_url=entry.source_url,
                 )
             )
@@ -589,6 +616,16 @@ async def upsert_schedule(
                     "source_url": entry.source_url,
                     "queued_at": datetime.now(KST).isoformat(),
                 })
+
+        # KBO ids: fill-blank only. Mirrors the starter-name policy — a
+        # confirmed id should never be silently overwritten by a later
+        # crawl, but an unresolved (None) slot is safe to populate.
+        if entry.home_starter_kbo_id is not None and existing.home_starter_kbo_id is None:
+            existing.home_starter_kbo_id = entry.home_starter_kbo_id
+            changed = True
+        if entry.away_starter_kbo_id is not None and existing.away_starter_kbo_id is None:
+            existing.away_starter_kbo_id = entry.away_starter_kbo_id
+            changed = True
 
         if entry.source_url and existing.source_url != entry.source_url:
             existing.source_url = entry.source_url

@@ -11,6 +11,9 @@ class Pitcher(Base):
     __tablename__ = "pitchers"
 
     pitcher_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    kbo_player_id: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, unique=True, index=True
+    )
     name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     name_en: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     team: Mapped[str] = mapped_column(String(8), nullable=False, index=True)

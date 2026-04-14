@@ -40,6 +40,7 @@ from app.models.matchup import Matchup
 from app.models.pitcher import Pitcher
 from app.services.crawler import (
     fetch_today_schedule,
+    match_pitcher_by_kbo_id,
     match_pitcher_name,
     upsert_schedule,
 )
@@ -121,6 +122,44 @@ async def _get_pitcher(session: AsyncSession, pitcher_id: int) -> Optional[Pitch
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
+async def _resolve_pitcher_id(
+    session: AsyncSession,
+    kbo_player_id: Optional[int],
+    starter_name: str,
+    team: str,
+    gd: date,
+) -> Optional[int]:
+    """
+    Prefer KBO playerId → fall back to name fuzzy match. On fallback success,
+    lazily write the kbo_id back to the pitcher row so the next run takes the
+    fast path. This is the "learn from the crawl" behavior that removes the
+    need for an eager A-6 harvester for already-seeded pitchers.
+
+    Write-back is a no-op if the pitcher row already has a (possibly
+    different) kbo_id — never silently clobber an existing mapping. The
+    unique index on `pitchers.kbo_player_id` is the last line of defence
+    against concurrent replicas racing to claim the same id.
+    """
+    if kbo_player_id is not None:
+        pid = await match_pitcher_by_kbo_id(session, kbo_player_id)
+        if pid is not None:
+            return pid
+
+    pid = await match_pitcher_name(session, starter_name, team, gd)
+    if pid is None:
+        return None
+
+    if kbo_player_id is not None:
+        pitcher = await _get_pitcher(session, pid)
+        if pitcher is not None and pitcher.kbo_player_id is None:
+            pitcher.kbo_player_id = kbo_player_id
+            logger.info(
+                "[scheduler:score] learned kbo_id %d for pitcher_id=%d (%s)",
+                kbo_player_id, pid, pitcher.name,
+            )
+    return pid
+
+
 async def _upsert_matchup_row(
     session: AsyncSession,
     gd: date,
@@ -198,6 +237,8 @@ async def analyze_and_score_matchups(game_date: Optional[date] = None) -> dict[s
             DailySchedule.stadium,
             DailySchedule.home_starter,
             DailySchedule.away_starter,
+            DailySchedule.home_starter_kbo_id,
+            DailySchedule.away_starter_kbo_id,
         ).where(DailySchedule.game_date == gd)
         schedule_rows = (await session.execute(stmt)).all()
 
@@ -207,6 +248,8 @@ async def analyze_and_score_matchups(game_date: Optional[date] = None) -> dict[s
             stadium = row.stadium
             home_starter = row.home_starter
             away_starter = row.away_starter
+            home_kbo_id = row.home_starter_kbo_id
+            away_kbo_id = row.away_starter_kbo_id
 
             if not home_starter or not away_starter:
                 logger.info(
@@ -216,26 +259,34 @@ async def analyze_and_score_matchups(game_date: Optional[date] = None) -> dict[s
                 counts["skipped"] += 1
                 continue
 
-            home_pid = await match_pitcher_name(session, home_starter, home_team, gd)
-            away_pid = await match_pitcher_name(session, away_starter, away_team, gd)
-            if home_pid is None or away_pid is None:
-                logger.warning(
-                    "[scheduler:score] skip %s@%s — unresolved pitcher (home=%s, away=%s)",
-                    away_team, home_team, home_pid, away_pid,
-                )
-                counts["skipped"] += 1
-                continue
-
-            home_pitcher = await _get_pitcher(session, home_pid)
-            away_pitcher = await _get_pitcher(session, away_pid)
-            if home_pitcher is None or away_pitcher is None:
-                counts["skipped"] += 1
-                continue
-
-            # Per-game atomic boundary: score + upsert + commit are wrapped
-            # together so an error on one game cannot roll back the rows
-            # already committed for prior games in this pipeline run.
+            # Per-game atomic boundary: pitcher resolution (which may lazy-write
+            # kbo_id back to the pitcher row), scoring, and matchup upsert all
+            # live inside the same try/commit. A failure or skip rolls back
+            # any partial mutation — most importantly, the write-back — so a
+            # dirty pitcher row cannot leak into the next game's commit.
             try:
+                home_pid = await _resolve_pitcher_id(
+                    session, home_kbo_id, home_starter, home_team, gd
+                )
+                away_pid = await _resolve_pitcher_id(
+                    session, away_kbo_id, away_starter, away_team, gd
+                )
+                if home_pid is None or away_pid is None:
+                    await session.rollback()
+                    logger.warning(
+                        "[scheduler:score] skip %s@%s — unresolved pitcher (home=%s, away=%s)",
+                        away_team, home_team, home_pid, away_pid,
+                    )
+                    counts["skipped"] += 1
+                    continue
+
+                home_pitcher = await _get_pitcher(session, home_pid)
+                away_pitcher = await _get_pitcher(session, away_pid)
+                if home_pitcher is None or away_pitcher is None:
+                    await session.rollback()
+                    counts["skipped"] += 1
+                    continue
+
                 score = await score_matchup(
                     session,
                     home_pitcher,

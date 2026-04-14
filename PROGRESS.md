@@ -98,6 +98,17 @@
 세션 7 산출물 (참고):
 - PR #4/#5 (`claude/session-7-nits-and-d7`) — N1+N2+N3 / D-7 / D-8 / alembic.ini cp949 fix.
 
+세션 10 산출물 (2026-04-14, 연속 PR 처리):
+- **세션 9 PR #7 merged** — Phase 6 배포 스켈레톤 main 반영 (CI green, main 6fe541e).
+- **H1 Stop hook 보강 (PR #8 merged)** — `.claude/hooks/code-reviewer-gate.sh` 가 `git diff --name-only origin/main...HEAD` 브랜치-레벨 diff 로 post-commit silent-pass 차단. 마커 포맷 `<contenthash>@<shortsha>`. 3단 fallback (origin/main → HEAD~1 → no-op), deleted-path sentinel 처리. 5 케이스 수동 테스트 통과. H2 는 embedded SHA 로 기능 대체됐다고 판단 — 정식 deferred.
+- **D-4 Tailwind 토큰화 (PR #9 merged)** — 조사 결과 D-4 원 전제(토큰 이미 존재)가 거짓이었음. `tailwind.config.ts` 에 `ink.title: "#0A192F"` 토큰을 **신규 추가** 후 `page.tsx:46` `text-[#0A192F]` → `text-ink-title` 리팩터. `frontend/preview/draft.html` 이 디자인 소스로 동일 색을 쓰고 있어 시각 변화 0. `.next/static/css` 에서 `.text-ink-title{color:rgb(10 25 47/...)}` 확인.
+- **A-5 KBO playerId 매처 (브랜치 `claude/session-10-a5-kbo-player-id`, 본 PR)** — `pitchers.kbo_player_id` (unique nullable int, indexed) + `daily_schedules.home/away_starter_kbo_id` (nullable int) 컬럼. Alembic `0002_add_kbo_player_id.py` (batch mode, roundtrip clean). `services/crawler.match_pitcher_by_kbo_id()` 헬퍼 (signature `Optional[int]`). `scheduler._resolve_pitcher_id()` 가 id-first → name-fallback + 성공 시 pitcher 로우에 kbo_id write-back ("crawl 에서 학습"). `upsert_schedule` 도 fill-blank 정책으로 kbo_id 저장. 유닛 테스트 9건 (id hit/miss/None, id preference, lazy learn, upsert insert/update/no-overwrite, write-back skip when already filled). pytest 12/12 통과, import smoke OK, Alembic upgrade→downgrade→upgrade roundtrip clean.
+- **A-5 code-reviewer 라운드** (pre-PR, PR #8 의 보강된 훅 동작을 실제 적용): Verdict APPROVE WITH FIXES (Critical 1 / Important 1 / Nits 2). 커밋 전 수정 반영:
+  · **Critical — write-back transaction leak**: `_resolve_pitcher_id` 호출이 `try:` 블록 바깥에 있어서 lazy write-back 이 현재 게임의 원자 트랜잭션 경계에 포함되지 않았음. 게임 A 의 write-back 이 dirty 상태로 세션에 남다가 게임 B 의 `session.commit()` / `session.rollback()` 에 휘말리는 구조. 수정: 전체 resolve→score→upsert→commit 을 하나의 try 로 묶고 skip 분기도 rollback 선행. 이제 해소/스코어링 어느 단계든 실패 시 write-back 이 깨끗이 롤백됨.
+  · **Important — type annotation drift**: `match_pitcher_by_kbo_id(kbo_player_id: int)` 가 body 에서 `None` 을 가드하고 있었음 → `Optional[int]` 로 수정, 직접 None 입력 케이스 테스트 추가.
+  · **Coverage gap — upsert fill-blank**: `upsert_schedule` 의 kbo_id fill-blank / no-overwrite 분기가 테스트 0건이었음 → 3개 테스트 추가 (insert 시 저장, update 시 NULL 슬롯 채우기, 확정된 id 덮어쓰지 않음).
+  · **Nit — match_pitcher_by_kbo_id(None) 명시 테스트**: 추가 완료 (위 카운트 포함). A-6 eager harvester 는 lazy write-back 이 기존 시드 풀을 커버하므로 우선순위 낮아져 deferred.
+
 세션 9 산출물 (브랜치 `claude/session-9-phase6-deploy`):
 - **Phase 6 sub-task 4** — 배포 스켈레톤 도입. 로드맵 §Phase 6 의 첫 빌딩블록.
   · `backend/Dockerfile` — `python:3.12-slim` + tini, non-root(uid 1000), `PYTHONPATH=/app/backend`, 엔트리가 `scripts/init_db.py`(alembic upgrade head) 후 uvicorn 기동. 이미지에 `.env` 미포함(런타임 env vars 만 의존).
@@ -151,8 +162,8 @@
 
 ### A. 크롤러 마무리 (nice-to-have)
 
-- [ ] **A-5.** `pitchers` 에 `kbo_player_id` 컬럼 추가 + `match_pitcher_by_kbo_id()` 헬퍼  
-- [ ] **A-6.** `seed_pitchers.py` 에 KBO 프로필 수확기 추가  
+- [x] **A-5.** `pitchers.kbo_player_id` + `daily_schedules.home/away_starter_kbo_id` 컬럼, `match_pitcher_by_kbo_id()` 헬퍼, 스케줄러 ID-first 분기 + lazy write-back (세션 10). Alembic 0002 roundtrip clean, pytest 8/8.
+- [ ] **A-6.** `seed_pitchers.py` KBO 프로필 수확기 — A-5 의 lazy write-back 이 기존 시드 투수를 이미 커버. 신규 시드 투수 초기 freshness 전용으로 우선순위 낮음.
 
 ### B. Phase 2 AI 실검증 ✅ (세션 8 완료)
 

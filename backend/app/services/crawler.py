@@ -391,7 +391,7 @@ def _clean_starter_name(raw) -> Optional[str]:
 
 async def match_pitcher_by_kbo_id(
     session: AsyncSession,
-    kbo_player_id: int,
+    kbo_player_id: Optional[int],
 ) -> Optional[int]:
     """
     Resolve a KBO playerId (from GetKboGameList) to a local pitcher_id.

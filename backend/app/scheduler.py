@@ -259,30 +259,34 @@ async def analyze_and_score_matchups(game_date: Optional[date] = None) -> dict[s
                 counts["skipped"] += 1
                 continue
 
-            home_pid = await _resolve_pitcher_id(
-                session, home_kbo_id, home_starter, home_team, gd
-            )
-            away_pid = await _resolve_pitcher_id(
-                session, away_kbo_id, away_starter, away_team, gd
-            )
-            if home_pid is None or away_pid is None:
-                logger.warning(
-                    "[scheduler:score] skip %s@%s — unresolved pitcher (home=%s, away=%s)",
-                    away_team, home_team, home_pid, away_pid,
-                )
-                counts["skipped"] += 1
-                continue
-
-            home_pitcher = await _get_pitcher(session, home_pid)
-            away_pitcher = await _get_pitcher(session, away_pid)
-            if home_pitcher is None or away_pitcher is None:
-                counts["skipped"] += 1
-                continue
-
-            # Per-game atomic boundary: score + upsert + commit are wrapped
-            # together so an error on one game cannot roll back the rows
-            # already committed for prior games in this pipeline run.
+            # Per-game atomic boundary: pitcher resolution (which may lazy-write
+            # kbo_id back to the pitcher row), scoring, and matchup upsert all
+            # live inside the same try/commit. A failure or skip rolls back
+            # any partial mutation — most importantly, the write-back — so a
+            # dirty pitcher row cannot leak into the next game's commit.
             try:
+                home_pid = await _resolve_pitcher_id(
+                    session, home_kbo_id, home_starter, home_team, gd
+                )
+                away_pid = await _resolve_pitcher_id(
+                    session, away_kbo_id, away_starter, away_team, gd
+                )
+                if home_pid is None or away_pid is None:
+                    await session.rollback()
+                    logger.warning(
+                        "[scheduler:score] skip %s@%s — unresolved pitcher (home=%s, away=%s)",
+                        away_team, home_team, home_pid, away_pid,
+                    )
+                    counts["skipped"] += 1
+                    continue
+
+                home_pitcher = await _get_pitcher(session, home_pid)
+                away_pitcher = await _get_pitcher(session, away_pid)
+                if home_pitcher is None or away_pitcher is None:
+                    await session.rollback()
+                    counts["skipped"] += 1
+                    continue
+
                 score = await score_matchup(
                     session,
                     home_pitcher,

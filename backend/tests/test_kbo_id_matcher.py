@@ -1,27 +1,33 @@
-"""A-5 — KBO playerId matcher + scheduler lazy write-back.
+"""A-5 — KBO playerId matcher + scheduler lazy write-back + upsert fill-blank.
 
-Covers three behaviours introduced in A-5:
+Covers the behaviours introduced in A-5:
 
 1. `match_pitcher_by_kbo_id` returns the owning pitcher_id for a given KBO
-   playerId and None when unmatched.
+   playerId, None when unmatched, and None when called with None input.
 2. `_resolve_pitcher_id` prefers the id lookup over name fuzzy match when
    the daily_schedules row carries a kbo_id that resolves.
 3. `_resolve_pitcher_id` falls back to name match when the id is missing
    or unresolved, and on fallback success writes the crawled kbo_id back
-   to the pitcher row (lazy learning). Write-back is refused when the
-   kbo_id is already claimed by another pitcher.
+   to the pitcher row (lazy learning). Write-back is skipped when the
+   slot is already filled.
+4. `upsert_schedule` fill-blank policy for `home/away_starter_kbo_id`: an
+   insert persists the crawled ids, and an update fills in a previously
+   NULL slot but never overwrites a confirmed id.
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import select
 
 from app.db import Base, SessionLocal, engine
+from app.models.daily_schedule import DailySchedule
 from app.models.pitcher import Pitcher
 from app.scheduler import _resolve_pitcher_id
-from app.services.crawler import match_pitcher_by_kbo_id
+from app.schemas.crawler import ScheduleEntry
+from app.services.crawler import match_pitcher_by_kbo_id, upsert_schedule
 
 
 GAME_DATE = date(2026, 4, 14)
@@ -75,6 +81,16 @@ async def test_match_by_kbo_id_miss_returns_none(fresh_db):
 
 
 @pytest.mark.asyncio
+async def test_match_by_kbo_id_none_input(fresh_db):
+    """Explicit guard: callers may pass Optional[int]; None must return None
+    without touching the DB (contract is documented in the Optional[int]
+    signature)."""
+    async with SessionLocal() as session:
+        pid = await match_pitcher_by_kbo_id(session, None)
+    assert pid is None
+
+
+@pytest.mark.asyncio
 async def test_resolve_prefers_kbo_id_over_name(fresh_db):
     """id hit short-circuits — name/team don't need to match at all."""
     async with SessionLocal() as session:
@@ -107,6 +123,95 @@ async def test_resolve_fallback_learns_kbo_id(fresh_db):
 
     assert pid == 2
     assert pitcher is not None and pitcher.kbo_player_id == 88042
+
+
+@pytest.mark.asyncio
+async def test_upsert_schedule_persists_kbo_ids_on_insert(fresh_db):
+    """Fresh crawl of a game — `upsert_schedule` must write the crawled
+    kbo_ids into the new columns, not drop them silently."""
+    entry = ScheduleEntry(
+        game_date=GAME_DATE,
+        home_team="SAM",
+        away_team="DS",
+        stadium="대구",
+        game_time=time(18, 30),
+        home_starter_name="원태인",
+        away_starter_name="곽빈",
+        home_starter_kbo_id=77250,
+        away_starter_kbo_id=88042,
+    )
+    async with SessionLocal() as session:
+        counts = await upsert_schedule(session, [entry])
+
+    assert counts == {"inserted": 1, "updated": 0, "skipped": 0}
+
+    async with SessionLocal() as session:
+        row = (await session.execute(select(DailySchedule))).scalar_one()
+    assert row.home_starter_kbo_id == 77250
+    assert row.away_starter_kbo_id == 88042
+
+
+@pytest.mark.asyncio
+async def test_upsert_schedule_fills_blank_kbo_ids_on_update(fresh_db):
+    """First crawl had a TBD away starter (no id). Second crawl supplies the
+    id — `upsert_schedule` must fill the previously NULL slot without
+    touching the confirmed home id.
+    """
+    first = ScheduleEntry(
+        game_date=GAME_DATE,
+        home_team="SAM",
+        away_team="DS",
+        stadium="대구",
+        game_time=time(18, 30),
+        home_starter_name="원태인",
+        away_starter_name=None,
+        home_starter_kbo_id=77250,
+        away_starter_kbo_id=None,
+    )
+    second = first.model_copy(update={
+        "away_starter_name": "곽빈",
+        "away_starter_kbo_id": 88042,
+    })
+
+    async with SessionLocal() as session:
+        await upsert_schedule(session, [first])
+        counts = await upsert_schedule(session, [second])
+
+    assert counts["updated"] == 1
+    assert counts["inserted"] == 0
+
+    async with SessionLocal() as session:
+        row = (await session.execute(select(DailySchedule))).scalar_one()
+    assert row.home_starter_kbo_id == 77250  # unchanged
+    assert row.away_starter_kbo_id == 88042  # filled
+
+
+@pytest.mark.asyncio
+async def test_upsert_schedule_never_overwrites_confirmed_kbo_id(fresh_db):
+    """Confirmed kbo_id must not be silently replaced by a later crawl (data
+    mismatch — keep DB value, same policy as starter-name fill-blank)."""
+    first = ScheduleEntry(
+        game_date=GAME_DATE,
+        home_team="SAM",
+        away_team="DS",
+        home_starter_name="원태인",
+        away_starter_name="곽빈",
+        home_starter_kbo_id=77250,
+        away_starter_kbo_id=88042,
+    )
+    second = first.model_copy(update={
+        "home_starter_kbo_id": 99999,  # hypothetical drift — must be ignored
+        "away_starter_kbo_id": 88042,
+    })
+
+    async with SessionLocal() as session:
+        await upsert_schedule(session, [first])
+        await upsert_schedule(session, [second])
+
+    async with SessionLocal() as session:
+        row = (await session.execute(select(DailySchedule))).scalar_one()
+    assert row.home_starter_kbo_id == 77250  # not overwritten
+    assert row.away_starter_kbo_id == 88042
 
 
 @pytest.mark.asyncio

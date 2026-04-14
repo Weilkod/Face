@@ -30,7 +30,6 @@ def main() -> None:
     settings = get_settings()
     alembic_cfg = Config(str(BACKEND_DIR / "alembic.ini"))
     alembic_cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
-    alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
 
     print(f"[init_db] running alembic upgrade head against {settings.database_url}")
     command.upgrade(alembic_cfg, "head")

@@ -91,7 +91,7 @@ export interface FortuneScoreDetail {
 }
 
 export interface PitcherDetail extends PitcherSummary {
-  birth_date: string;
+  birth_date: string | null;
   blood_type: string | null;
   face_scores: FaceScoreDetail | null;
   today_fortune: FortuneScoreDetail | null;
@@ -109,13 +109,6 @@ export interface AccuracyStats {
   accuracy_rate: number;
   recent_7_days?: PeriodAccuracy;
   last_updated?: string;
-}
-
-export interface PitcherProfile extends PitcherSummary {
-  birth_date: string | null;
-  blood_type: string | null;
-  hand: string | null;
-  scores: PitcherScores | null;
 }
 
 export interface HistoryMatchup extends MatchupSummary {

@@ -43,7 +43,7 @@ export default async function TodayMatchupsPage() {
             KBO · 2026 · SEASON
           </p>
           <h1
-            className="text-[3.15rem] font-bold tracking-tight text-[#0A192F] md:text-[4.2rem]"
+            className="text-[3.15rem] font-bold tracking-tight text-ink-title md:text-[4.2rem]"
           >
             FACEMETRICS
           </h1>

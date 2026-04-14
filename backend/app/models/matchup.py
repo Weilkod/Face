@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, false, func
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, false, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -23,9 +23,15 @@ class Matchup(Base):
         ForeignKey("pitchers.pitcher_id", ondelete="RESTRICT"), nullable=False
     )
 
-    chemistry_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    home_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    away_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    chemistry_score: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0, server_default=text("0")
+    )
+    home_total: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    away_total: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     predicted_winner: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
     winner_comment: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     actual_winner: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)

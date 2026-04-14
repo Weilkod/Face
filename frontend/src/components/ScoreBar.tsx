@@ -3,14 +3,12 @@
 interface ScoreBarProps {
   homeScore: number;
   awayScore: number;
-  maxScore?: number;
   animationDelay?: number;
 }
 
 export default function ScoreBar({
   homeScore,
   awayScore,
-  maxScore = 20,
   animationDelay = 0,
 }: ScoreBarProps) {
   const total = homeScore + awayScore;

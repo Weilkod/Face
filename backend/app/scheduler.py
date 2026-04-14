@@ -153,7 +153,7 @@ async def _resolve_pitcher_id(
         pitcher = await _get_pitcher(session, pid)
         if pitcher is not None and pitcher.kbo_player_id is None:
             pitcher.kbo_player_id = kbo_player_id
-            logger.info(
+            logger.debug(
                 "[scheduler:score] learned kbo_id %d for pitcher_id=%d (%s)",
                 kbo_player_id, pid, pitcher.name,
             )

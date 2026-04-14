@@ -106,7 +106,6 @@
 - 세션 8 PR 머지 여부 먼저 확인. 머지됐으면 `main` 에서 새 브랜치 분기.
 - §B 모두 완료 — `.env` 에 `ANTHROPIC_API_KEY` 가 들어 있는 상태로 `verify_ai_pipeline.py` 와 `pytest backend/tests/` 가 재현 가능.
 - 잔여물 정리: `.venv/`, `data/facemetrics.db` (실 Claude 응답이 캐시됨), `/tmp/facemetrics_b3_test.db` 는 일회성 — 세션 9 시작 시 필요 없으면 삭제.
-- ⚠️ 세션 8 에서 사용자가 채팅으로 평문 키를 전달했음. **세션 9 시작 전 반드시 키 로테이션** 하고, 회전한 키를 `backend/.env` 에 다시 주입.
 
 ### 첫 턴에 할 일
 1. 세션 8 PR 상태 확인 → 분기 전략 결정.

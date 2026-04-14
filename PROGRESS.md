@@ -79,56 +79,53 @@
 
 ---
 
-## 현재 상태 (세션 6 기준, 2026-04-13)
+## 현재 상태 (세션 7 기준, 2026-04-14)
 
-Phase 6 sub-task 1~3 모두 완료. Alembic 마이그레이션 + @vercel/og 공유 카드 + 사후 code-reviewer 수정까지 들어갔고, 세션 4/5 `code-reviewer` BLOCK 지적사항(C1~C5, I1~I6, D-1~D-7) 은 PR #1 (`726a3ea`, `e31c3c1`, `f4fba33`) + 이번 세션의 사후 리뷰로 대부분 해소됨.  
+세션 6 사후 리뷰 잔여 (N1/N2/N3) + 세션 4/5 BLOCK 잔여 (D-7 `PitcherProfile` 타입 정렬, D-8 360px 모바일 smoke) 모두 완료. N1/N2 는 Korean Windows (cp949) 환경에서 alembic 이 `alembic.ini` 를 읽을 때 `UnicodeDecodeError` 로 터지던 pre-existing 인코딩 버그 (L25 em dash) 까지 제거한 뒤 실기동 검증 완료.
+
 **배포 이전 남은 blocker 는 §B (AI 실검증) 뿐이며, 나머지는 nits/운영 잔여/Phase 6 배포 작업.**
+
+세션 7 산출물:
+- PR #4 (`claude/session-7-nits-and-d7`) 5 커밋: N1+N2+N3 / D-7 / PROGRESS / D-8 확정 / alembic.ini cp949 fix.
 
 ---
 
-## [WPI] 세션 7 인계 (2026-04-13)
+## [WPI] 세션 8 인계 (2026-04-14)
 
 ### 시작 상태
-- 현재 브랜치 (이전 세션이 남긴 것): `claude/fix-post-hoc-review-98a36f3` — 푸시 완료, **PR 대기**
-- `origin/main` @ `24c80bd` (PR #2 머지됨)
-- `.env` 에 `ANTHROPIC_API_KEY` 여전히 없음 → §B 미검증
+- PR #4 머지 여부를 먼저 확인. 머지됐으면 `main` 에서 신규 브랜치 분기, 아직이면 PR 리뷰/수정 이어가기.
+- `origin/main` 기준 (PR #4 전): 세션 6 완료 상태 (`d4418bd`).
+- `.env` 에 `ANTHROPIC_API_KEY` 여전히 없음 → §B 착수 전 반드시 확인.
+- 로컬 venv (`.venv/`) 및 `/tmp/facemetrics_n2_test.db` 는 세션 7 의 일회성 검증 부산물 — 세션 8 시작 시 필요 없으면 정리.
 
 ### 첫 턴에 할 일
-1. 이 브랜치 PR 리뷰/머지 상태 확인. 아직 머지 안 됐으면 체크아웃해서 이어가거나 신규 브랜치 분기.
-2. 아래 "코드 리뷰어 사후 리뷰 잔여 (nit)" 3건을 `fastapi-backend-dev` / `react-ui-dev` 에 병렬 위임.
-3. §D 의 D-4(partial), D-7(미해결), D-8 을 확인 후 일괄 처리.
-4. §B 시작 여부 결정 (API 키 확보 가능 여부).
+1. PR #4 상태 확인 후 브랜치 분기 전략 결정.
+2. §B 시작 여부 결정 — `.env` 에 `ANTHROPIC_API_KEY` 가 주입됐는지 먼저 확인. 없으면 사용자에게 요청, 주입되면 B-1 부터 순차 진행.
+3. §B 가 아직 막혀 있으면 Phase 6 배포 작업의 선행 준비 (Dockerfile, docker-compose, CI 설정 파일 스켈레톤) 로 전환하거나, D-4 partial / H1-H2 stop hook 보강 / A-5-A-6 크롤러 nice-to-have 같은 non-blocker 작업 정리.
 
-### 코드 리뷰어 사후 리뷰 잔여 (nit — 블로커 아님)
-
-- [x] **N1** `backend/app/models/matchup.py:26-34` — `chemistry_score` / `home_total` / `away_total` 에 `server_default=text("0")` 추가 (세션 7).
-- [x] **N2** `scripts/init_db.py:33` — `set_main_option("sqlalchemy.url", ...)` 중복 주입 라인 삭제. env.py 가 단일 진실 원소 (세션 7).
-- [x] **N3** `frontend/src/components/ScoreBar.tsx` — 미사용 `maxScore?: number` prop 제거 (세션 7).
-
-### 세션 4/5 BLOCK 이슈 — 현재 상태 (검증 완료)
-
-PR #1 (`726a3ea`) + 이후 커밋 (`e31c3c1`, `f4fba33`) + 이번 사후 리뷰로 대부분 해소됨. 세션 7 에서 **실기동 + 코드 확인만** 필요한 항목:
+### 세션 7 에서 완료된 항목 (참고용)
 
 | ID | 상태 | 비고 |
 |---|---|---|
-| C1 (`api.ts \|\| true`) | ✅ | grep 결과 0 hit |
-| C2 (`as MatchupDetail` 캐스팅) | ✅ | grep 결과 0 hit |
-| C3/I1/I6 (하드코딩 날짜) | ✅ | 로직 파일에 0 hit, `mockMatchups.ts` 의 시드 값만 남음 |
-| C4 (`game_time` / `series_label`) | ✅ | `backend/app/schemas/response.py:88-89` 존재 |
-| I3 (`chemistry_score ge/le`) | ✅ | `response.py:63,87` 존재 |
-| I4 (IN 배치 로드) | ✅ | `routers/matchup.py:114,129,144` `.in_(pitcher_ids)` |
-| I2 (인라인 스타일 → Tailwind) | ⚠️ **partial** | `page.tsx:46` 가 `style={{}}` 대신 arbitrary value `text-[#0A192F]` 로 이동. inline 은 제거됐지만 토큰화 안 됨. `tailwind.config.ts` 에 `ink.title` 같은 토큰 추가 후 `text-ink-title` 로 재작업 권장 (nit 수준) |
-| C5 (`PitcherProfile` 타입 정렬) | ✅ (세션 7) | `PitcherProfile` 삭제, `getPitcher()` → `PitcherDetail` 반환, `pitcher/[id]/page.tsx` 가 `face_scores`+`today_fortune` 분리 shape 을 직접 집계. mock 경로도 `FaceScoreDetail`/`FortuneScoreDetail` 로 분해. `pitcher.hand` 렌더 블록 제거 (DB 필드 없음). `npx tsc --noEmit` + `npm run build` clean |
-| D-8 (360px 모바일 smoke test) | ✅ (세션 7) | `next dev` 구동 + `/`, `/pitcher/1`, `/history` curl 200 OK. 컴포넌트 정적 분석 (MatchupCard/ShareButton/Footer/RadarChart) — 하드코딩 360 초과 너비 0건, `min-h-[44px]` 터치 타겟 보존, `viewBox`+`w-full` radar 스케일 OK. 사용자 로컬 DevTools 360×800 육안 검수 통과 |
+| N1 `models/matchup.py` `server_default=text("0")` | ✅ | 세션 7 PR #4 |
+| N2 `scripts/init_db.py` URL 중복 주입 제거 | ✅ | 세션 7 PR #4, Python 3.12 + venv 로 `alembic upgrade head` 5 테이블 생성 실검증 |
+| N3 `components/ScoreBar.tsx` `maxScore` prop 제거 | ✅ | 세션 7 PR #4 |
+| C5 / D-7 `PitcherProfile` 타입 정렬 | ✅ | 세션 7 PR #4, mock 경로까지 `PitcherDetail` 로 통합, `tsc --noEmit` + `npm run build` clean |
+| D-8 360px 모바일 smoke | ✅ | `next dev` + 세 경로 200 + 정적 분석 + 사용자 로컬 DevTools 360×800 육안 검수 통과 |
+| alembic.ini cp949 fix | ✅ | L25 em dash → `--` 치환. Korean Windows 환경에서 `init_db.py` 가 돌아가게 됨 (pre-existing 인코딩 버그) |
 
-### Stop hook 보강 (별도 follow-up)
+세션 4/5 BLOCK 잔여 중 아직 열려 있는 항목:
+
+- **I2 Tailwind 토큰화 (D-4 partial)** — `page.tsx:46` 의 arbitrary value `text-[#0A192F]` 를 `tailwind.config.ts` 에 `ink.title` 토큰 추가 후 `text-ink-title` 로 재작업. nit 수준.
+
+### Stop hook 보강 (계속 이월)
 
 `.claude/hooks/code-reviewer-gate.sh` 는 `git diff --name-only HEAD` 로 working tree 만 보기 때문에, commit 직후 stop 턴은 항상 clean → silent pass. 다음 중 하나로 보강:
 
 - [ ] **H1** 현재 브랜치의 `git diff origin/main...HEAD --name-only` 도 함께 보고, 리뷰 마커 (`.claude/.last-reviewed-hash`) 에 커밋 해시도 포함시켜 "해당 커밋이 리뷰된 적 있는지" 판단
 - [ ] 또는 **H2** 세션 마지막 턴이 `git commit` / `git push` 를 포함하면 명시적으로 code-reviewer 호출을 요구하는 차단 규칙 추가
 
-이번 세션에서는 fix 자체만 수행, hook 보강은 미뤘음.
+세션 7 은 수동으로 `code-reviewer` 서브에이전트를 커밋 전에 호출해서 (CRITICAL/MAJOR 0, Minor 3 → 전부 반영) 보완했지만, 구조적 개선은 여전히 미뤄진 상태.
 
 ---
 

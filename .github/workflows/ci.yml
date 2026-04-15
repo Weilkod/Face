@@ -51,6 +51,15 @@ jobs:
           DATABASE_URL: sqlite+aiosqlite:///${{ github.workspace }}/data/facemetrics.db
         run: python scripts/init_db.py
 
+      - name: Alembic roundtrip (upgrade head → downgrade base → upgrade head)
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///${{ github.workspace }}/data/facemetrics.db
+        working-directory: backend
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
+
       - name: Import smoke
         run: python -c "from app.main import app; print('app import OK')"
 

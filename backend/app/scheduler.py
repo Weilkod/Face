@@ -338,10 +338,21 @@ async def analyze_and_score_matchups(game_date: Optional[date] = None) -> dict[s
 
 
 async def publish_matchups(game_date: Optional[date] = None) -> int:
-    """11:00 KST: flip is_published=True on today's matchups rows."""
+    """11:00 KST: flip is_published=True on today's matchups rows.
+
+    Only rows that are still unpublished get flipped. Re-running the 11:00 job
+    (cron retry, manual replay, test harness) must be idempotent: already
+    published matchups MUST NOT be touched, otherwise `created_at` noise and
+    downstream publish-side effects (cache invalidation, revalidation hooks)
+    would fire a second time for the same row. The `is_published.is_(False)`
+    filter is what makes the job safe to rerun.
+    """
     gd = game_date or _today_kst()
     async with SessionLocal() as session:
-        stmt = select(Matchup).where(Matchup.game_date == gd)
+        stmt = select(Matchup).where(
+            Matchup.game_date == gd,
+            Matchup.is_published.is_(False),
+        )
         rows = list((await session.execute(stmt)).scalars().all())
         for r in rows:
             r.is_published = True

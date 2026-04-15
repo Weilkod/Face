@@ -12,11 +12,19 @@ call `Base.metadata.create_all` — Alembic is the single source of truth for
 schema and bypassing it would leave `alembic_version` un-stamped.
 
 Usage (from repo root):
-    python scripts/init_db.py      # once, to create tables
-    python scripts/seed_pitchers.py
+    python scripts/init_db.py        # once, to create tables
+    python scripts/seed_pitchers.py  # baseline seed from JSON
+
+    # A-6 eager harvester (opt-in) — talks to koreabaseball.com and fills
+    # `kbo_player_id` for any seeded pitcher whose slot is still NULL.
+    # Rate-limited at 1 req/sec per host, so expect ~2s per pitcher.
+    python scripts/seed_pitchers.py --harvest
+    python scripts/seed_pitchers.py --harvest --dry-run
+    python scripts/seed_pitchers.py --harvest --pitcher-id 3
 """
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import sys
@@ -97,7 +105,54 @@ def load_manifest_photo_map() -> dict[int, str]:
     return merged
 
 
-async def main() -> int:
+async def _harvest_missing_kbo_ids(
+    session,
+    pitcher_id_filter: int | None = None,
+) -> dict[str, int]:
+    """Fill `pitcher.kbo_player_id` (and profile_photo if empty) by calling
+    the KBO player search site. Opt-in path; caller flushes the session."""
+    from app.services.crawler import _make_client
+    from app.services.kbo_profile_harvester import harvest_profile
+
+    stmt = select(Pitcher)
+    if pitcher_id_filter is not None:
+        stmt = stmt.where(Pitcher.pitcher_id == pitcher_id_filter)
+    all_pitchers = list((await session.execute(stmt)).scalars().all())
+
+    counts = {"hit": 0, "miss": 0, "skipped": 0, "photo_filled": 0}
+
+    async with _make_client() as client:
+        for p in all_pitchers:
+            if p.kbo_player_id is not None:
+                counts["skipped"] += 1
+                print(
+                    f"[harvest] skip {p.name} ({p.team}): already has kbo_id={p.kbo_player_id}"
+                )
+                continue
+
+            result = await harvest_profile(client, p.name, p.team)
+            if result is None:
+                counts["miss"] += 1
+                print(f"[harvest] MISS {p.name} ({p.team}): no KBO match")
+                continue
+
+            p.kbo_player_id = result.kbo_player_id
+            counts["hit"] += 1
+            if result.profile_photo_url and not p.profile_photo:
+                p.profile_photo = result.profile_photo_url
+                counts["photo_filled"] += 1
+                print(
+                    f"[harvest] HIT  {p.name} ({p.team}): kbo_id={result.kbo_player_id} + photo"
+                )
+            else:
+                print(
+                    f"[harvest] HIT  {p.name} ({p.team}): kbo_id={result.kbo_player_id}"
+                )
+
+    return counts
+
+
+async def main(args: argparse.Namespace) -> int:
     raw = json.loads(PITCHERS_PATH.read_text(encoding="utf-8"))
     pitchers_data = raw["pitchers"]
     season = raw["_meta"]["season"]
@@ -148,12 +203,67 @@ async def main() -> int:
                 if photo:
                     existing.profile_photo = photo
                 updated += 1
-        await session.commit()
 
-    print(f"[seed_pitchers] season={season} inserted={inserted} updated={updated}")
+        # Flush JSON upserts before the harvest pass so the harvester sees the
+        # latest `kbo_player_id` state (including any NULLs that the JSON seed
+        # just created for new rows).
+        await session.flush()
+
+        harvest_counts = None
+        if args.harvest:
+            print("[harvest] starting KBO eager harvester...")
+            harvest_counts = await _harvest_missing_kbo_ids(
+                session,
+                pitcher_id_filter=args.pitcher_id,
+            )
+
+        if args.dry_run:
+            await session.rollback()
+            print("[seed_pitchers] --dry-run: rolled back, no rows written")
+        else:
+            await session.commit()
+
+    print(
+        f"[seed_pitchers] season={season} inserted={inserted} updated={updated}"
+    )
     print(f"[seed_pitchers] db url: {engine.url}")
     print(f"[seed_pitchers] photos wired from manifest: {len(photo_map)}")
+    if harvest_counts is not None:
+        print(
+            "[harvest] summary: "
+            f"hit={harvest_counts['hit']} "
+            f"miss={harvest_counts['miss']} "
+            f"skipped={harvest_counts['skipped']} "
+            f"photo_filled={harvest_counts['photo_filled']}"
+        )
     return 0
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Seed the pitchers table from JSON.")
+    parser.add_argument(
+        "--harvest",
+        action="store_true",
+        help=(
+            "After seeding, talk to koreabaseball.com/Player/Search.aspx and "
+            "fill pitcher.kbo_player_id (and profile_photo if empty) for any "
+            "row whose id slot is still NULL. Opt-in — omit to preserve the "
+            "original offline seed behavior (CI / test environments)."
+        ),
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Roll back all DB writes at the end. Useful with --harvest to "
+        "preview what would be filled without mutating dev state.",
+    )
+    parser.add_argument(
+        "--pitcher-id",
+        type=int,
+        default=None,
+        help="Restrict the harvest pass to a single pitcher_id (debugging).",
+    )
+    return parser.parse_args(argv)
 
 
 if __name__ == "__main__":
@@ -161,4 +271,4 @@ if __name__ == "__main__":
         sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
     except Exception:
         pass
-    raise SystemExit(asyncio.run(main()))
+    raise SystemExit(asyncio.run(main(parse_args())))

@@ -260,6 +260,9 @@ async def _fetch_kbo(
         )
         return []
 
+    # Session 11 A-7 decision: srId allowlist covers regular(0)/시범(1)/포스트(3,4,5)/
+    # 올스타(7). Live-verified no-op on 2026-04-15 (5-game early regular season) via
+    # scripts/verify_srid.py; rainout / doubleheader / postseason transitions untested.
     form = {
         "date": game_date.strftime("%Y%m%d"),
         "leId": "1",

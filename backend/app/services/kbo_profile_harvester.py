@@ -39,7 +39,6 @@ import httpx
 from bs4 import BeautifulSoup
 
 from app.services.crawler import (
-    DEFAULT_HEADERS,  # noqa: F401  (kept as doc of which headers the client uses)
     GET_HEADER_OVERRIDE,
     RATE_LIMIT_S,
     _make_client,

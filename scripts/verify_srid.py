@@ -1,9 +1,10 @@
 """
 verify_srid.py — A-7 srId 라이브 검증 (세션 11).
 
-crawler.py 의 현재 값 `0,1,3,4,5,7` vs CLAUDE.md §5 스펙 `0,9,6` 을
-실 KBO `POST /ws/Main.asmx/GetKboGameList` 로 둘 다 호출해,
-1군 정규시즌 경기 수 + 퓨처스 혼입 여부를 대조한다.
+crawler.py 의 현재 값 `0,1,3,4,5,7` (세션 11 에서 CLAUDE.md §5 에 문서화됨)
+과 축약 variant 들을 실 KBO `POST /ws/Main.asmx/GetKboGameList` 로 호출해,
+1군 정규시즌 경기 수 + SR_ID / LE_ID 분포 + 퓨처스 혼입 여부를 대조한다.
+2026-04-15 에서는 세 variant 모두 동일 payload (SR_ID=0/LE_ID=1) 를 반환했다.
 
 일회성 검증 스크립트이므로 결과를 stdout 에 덤프하고 종료.
 사용법:
@@ -61,6 +62,9 @@ def _unwrap(payload):
 async def _one(client: httpx.AsyncClient, label: str, sr: str, yyyymmdd: str) -> dict:
     form = {"date": yyyymmdd, "leId": "1", "srId": sr}
     try:
+        # Rate-limit BEFORE the first request too (not only between variants in main),
+        # so back-to-back runs of this script stay ≤ 1 req/s per host.
+        await asyncio.sleep(1.0)
         resp = await client.post(URL, data=form)
         status = resp.status_code
         try:

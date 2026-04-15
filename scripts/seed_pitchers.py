@@ -27,9 +27,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import sys
 from datetime import date
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BACKEND_DIR = PROJECT_ROOT / "backend"
@@ -123,31 +126,37 @@ async def _harvest_missing_kbo_ids(
 
     async with _make_client() as client:
         for p in all_pitchers:
-            if p.kbo_player_id is not None:
-                counts["skipped"] += 1
-                print(
-                    f"[harvest] skip {p.name} ({p.team}): already has kbo_id={p.kbo_player_id}"
+            try:
+                if p.kbo_player_id is not None:
+                    counts["skipped"] += 1
+                    print(
+                        f"[harvest] skip {p.name} ({p.team}): already has kbo_id={p.kbo_player_id}"
+                    )
+                    continue
+
+                result = await harvest_profile(client, p.name, p.team)
+                if result is None:
+                    counts["miss"] += 1
+                    print(f"[harvest] MISS {p.name} ({p.team}): no KBO match")
+                    continue
+
+                p.kbo_player_id = result.kbo_player_id
+                counts["hit"] += 1
+                if result.profile_photo_url and not p.profile_photo:
+                    p.profile_photo = result.profile_photo_url
+                    counts["photo_filled"] += 1
+                    print(
+                        f"[harvest] HIT  {p.name} ({p.team}): kbo_id={result.kbo_player_id} + photo"
+                    )
+                else:
+                    print(
+                        f"[harvest] HIT  {p.name} ({p.team}): kbo_id={result.kbo_player_id}"
+                    )
+            except Exception as exc:  # noqa: BLE001 — don't abort the whole harvest on one bad row
+                logger.warning(
+                    "[harvest] ERROR %s (%s): %s — skipping", p.name, p.team, exc
                 )
                 continue
-
-            result = await harvest_profile(client, p.name, p.team)
-            if result is None:
-                counts["miss"] += 1
-                print(f"[harvest] MISS {p.name} ({p.team}): no KBO match")
-                continue
-
-            p.kbo_player_id = result.kbo_player_id
-            counts["hit"] += 1
-            if result.profile_photo_url and not p.profile_photo:
-                p.profile_photo = result.profile_photo_url
-                counts["photo_filled"] += 1
-                print(
-                    f"[harvest] HIT  {p.name} ({p.team}): kbo_id={result.kbo_player_id} + photo"
-                )
-            else:
-                print(
-                    f"[harvest] HIT  {p.name} ({p.team}): kbo_id={result.kbo_player_id}"
-                )
 
     return counts
 

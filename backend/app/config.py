@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     claude_model_vision: str = Field(default="claude-opus-4-6")
     claude_model_text: str = Field(default="claude-sonnet-4-6")
 
+    scheduler_enabled: bool = Field(default=True)
     scheduler_timezone: str = Field(default="Asia/Seoul")
     crawl_hour: int = Field(default=8)
     analyze_hour: int = Field(default=10)

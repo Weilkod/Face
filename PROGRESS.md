@@ -79,9 +79,18 @@
 
 ---
 
-## 현재 상태 (세션 10 기준, 2026-04-14)
+## 현재 상태 (세션 11 기준, 2026-04-15)
 
-main=`14c7e20`. 세션 10 에서 PR #7/#8/#9/#10/#11 연속 처리. **배포 이전 blocker 없음** — Phase 6 실 배포(Vercel/Railway) + C1 srId 라이브 검증 + I3 APScheduler 싱글톤 가드가 남은 잔여. H1 stop hook 보강은 PR #8 에서 완료되어 이월 목록에서 제거됨 (H2 는 embedded SHA 로 기능 대체 판단, 정식 deferred). D-4 tailwind 토큰화는 PR #9 완료.
+main=`95d0873`. 세션 11 첫 턴 A-7 srId 라이브 검증 resolve. **배포 이전 blocker 없음** — Phase 6 실 배포(Vercel/Railway) + I3 APScheduler 싱글톤 가드가 남은 잔여. C1 srId 는 A-7 결과로 false alarm 판정 (아래 세션 11 산출물 참조). H1 stop hook 보강은 PR #8, D-4 tailwind 토큰화는 PR #9 완료.
+
+세션 11 산출물:
+- **A-7 srId 라이브 검증 완료** — `scripts/verify_srid.py` 로 `2026-04-15` 날짜에 세 변종(`0,1,3,4,5,7` / `0,9,6` / `0`)을 실 KBO `POST /ws/Main.asmx/GetKboGameList` 에 병렬 호출. 세 응답 모두 **5경기 동일**, 모든 게임 `SR_ID=0` / `LE_ID=1` (정규시즌 1군). 결론: 정규시즌 기간 `srId` 필터는 실질 no-op 이며 코드 값(`0,1,3,4,5,7`)과 스펙 값(`0,9,6`) 어느 쪽이든 매처 동작 동일. CLAUDE.md §5 를 코드값(더 보수적으로 시범/포스트시즌/올스타까지 덮는 allowlist)에 맞춰 정정. `srId` 의 series-type 매핑 (0=정규, 1=시범, 3/4/5=포스트, 7=올스타) 주석으로 기록. 포스트시즌/시범경기 기간 차이는 이번 검증에서 관측 불가 (날짜 제약), 나중에 해당 시즌 도달 시 재검증 여지.
+- **I3 APScheduler 싱글톤 가드 완료** — `app/config.py` 에 `scheduler_enabled: bool = True` 필드 추가 (pydantic-settings 가 `SCHEDULER_ENABLED` 환경변수로 자동 매핑). `app/main.py:lifespan` 이 `settings.scheduler_enabled` 가 True 일 때만 `build_scheduler().start()` 를 호출하고, False 면 INFO 로그만 찍고 skip. finally 블록도 `scheduler is not None` 가드 후 shutdown. Admin 라우터는 스케줄러 인스턴스에 의존하지 않고 `app.scheduler` 모듈의 job 콜러블을 직접 import 하므로 (`crawl_schedule_job`, `analyze_and_score_matchups`, `publish_matchups`), 웹 파드가 scheduler 를 끈 상태에서도 `/admin/*` 수동 트리거는 정상 동작. 검증: pydantic Settings 직접 주입 (`default=True`, `false`/`0` → False, `true` → True) + `main.py` AST parse clean. 참고: 이번 환경에 `fastapi` 글로벌 미설치로 `from app.main import app` 전체 import smoke 는 미실행, AST 및 config 라운드트립만 검증. CI(PR) 에서 풀 smoke 커버.
+  - **배포 런북 (Phase 6 Railway/Fly 적용 시 필수)** — 멀티 레플리카에서 크론 중복 실행 방지 원칙:
+    · **웹 서비스 (replicas ≥ 1)**: `SCHEDULER_ENABLED=false`. 트래픽을 받는 모든 인스턴스.
+    · **워커 프로세스 (replicas=1 고정)**: `SCHEDULER_ENABLED=true`. 크롤/분석/퍼블리시 5 잡 실행 전용. 수평 확장 금지 — 두 개 띄우면 `fortune_scores` 중복 write + Claude 토큰 2배 소모 재발.
+    · dev/staging 단일 프로세스 구성은 기본값(`true`) 유지, 명시 설정 불필요.
+    · Railway 의 경우 별도 Service 로 워커 분리 권장, Fly 는 `[processes]` 블록으로 `app`/`worker` 분리.
 
 세션 8 산출물 (브랜치 `claude/session-8-ai-validation`):
 - **B-1** 캐시 미스→히트 경로 실검증. `scripts/verify_ai_pipeline.py` 가 `pitcher_id=1,2` 의 profile_photo 를 manifest KBO URL 로 override 한 뒤 face/fortune 을 1회씩 실호출, 두번째 호출에서 캐시 히트(Claude 호출 0회)를 row count assertion 으로 검증. 4번의 실 Claude 호출(Vision×2 + Text×2) 모두 200 OK, 토큰 사용 로그 적재됨. score_matchup() 통합도 정상.
@@ -134,31 +143,29 @@ main=`14c7e20`. 세션 10 에서 PR #7/#8/#9/#10/#11 연속 처리. **배포 이
 
 ---
 
-## [WPI] 세션 11 인계 (2026-04-14)
+## [WPI] 세션 12 인계 (2026-04-15)
 
 ### 시작 상태
-- main=`14c7e20`. 세션 10 에서 PR #7/#8/#9/#10/#11 모두 머지 완료. CI 전부 green, stop hook H1 실사용 1회 이상 (PR #10 fix 사이클에서 작동 확인).
-- 세션 8 키 로테이션 완료, `backend/.env` 정상.
-- 로컬 `docker` CLI 아직 없음 — compose 실 smoke 는 여전히 미검증.
-- `backend/app/services/crawler.py:266` 의 `srId=0,1,3,4,5,7` 이 CLAUDE.md §5 스펙 `0,9,6` 과 불일치한 채로 main 에 남아있음. **A-5 매처는 이 값을 전제로 구현돼 있으므로 값이 틀렸다면 매칭이 안 되는 시즌이 올 수 있음** — 첫 턴 검증 권장.
-- README.md 에 `kbo_player_id` / daily_schedules kbo_id 컬럼 스키마 문서가 사용자 손으로 추가됨 (PR #11 시점 로컬 dirty, 사용자가 직접 커밋 예정 → 세션 11 시작 시 `git log` 로 반영 여부 확인 후 pull).
+- main=`95d0873` + 세션 11 브랜치(`claude/session-11-a7-i3`, 예정 PR). 세션 11 에서 A-7(srId 라이브 검증) + I3(APScheduler 싱글톤 가드) 두 건 resolve. code-reviewer 라운드 APPROVE WITH FIXES (Important 3 모두 반영 후 커밋).
+- 세션 8 키 로테이션 이후 `backend/.env` 유지.
+- 로컬 `docker` CLI 아직 없음 — compose 실 smoke 여전히 미검증.
+- 세션 11 환경에 `fastapi` 글로벌 미설치로 `from app.main import app` 풀 import smoke 는 미실행. AST parse + config 라운드트립만 로컬 검증. PR CI(`.github/workflows/ci.yml`) 가 풀 backend import + pytest 커버.
 
 ### 첫 턴에 할 일 (권장 순서)
 
-**1. C1 srId 라이브 검증** (blocker 여부 결정) — `kbo-data-crawler` 에이전트에 위임.
-   - 현재 코드값 `0,1,3,4,5,7` 과 CLAUDE.md 스펙값 `0,9,6` 을 **둘 다** 실 KBO `POST /ws/Main.asmx/GetKboGameList` 로 호출, 응답의 1군 정규시즌 경기 수 + 퓨처스 혼입 여부를 대조.
-   - 결론에 따라 코드 또는 CLAUDE.md 중 한 쪽을 수정 → A-5 매처의 정확성 보장.
-   - 이건 라이브 호출이므로 별도 세션에서 시간 여유 두고 처리하는 게 안전.
+**1. 세션 11 PR 머지 확인 + main rebase** — `claude/session-11-a7-i3` 가 CI green 이면 squash merge. `git pull origin main` 으로 시작.
 
-**2. Phase 6 실 배포** (Vercel FE + Railway/Fly BE) — 배포 직전 반드시 선행할 작업:
-   - **I3 APScheduler 싱글톤 가드** (`backend/app/main.py:17-18` lifespan 이 무조건 scheduler 기동). replicas ≥ 2 환경에서 크롤/분석/퍼블리시 잡이 중복 실행되어 `fortune_scores` 중복 write + Claude 토큰 2배 소모 위험. `SCHEDULER_ENABLED` 플래그 또는 "scheduler 전용 워커 프로세스" 분리 필수.
+**2. Phase 6 실 배포** (Vercel FE + Railway/Fly BE) — I3 가드는 준비됐으므로 이제 실 배포 가능:
+   - **Railway/Fly 서비스 분리**: 웹 서비스에 `SCHEDULER_ENABLED=false`, 워커 프로세스(replicas=1 고정) 에 `SCHEDULER_ENABLED=true`. PROGRESS.md §세션 11 I3 배포 런북 참조.
    - Postgres 프로비저닝 + `DATABASE_URL` asyncpg 전환 + `ANTHROPIC_API_KEY` secret 주입.
-   - OG route edge runtime 검증 (`@vercel/og` 이 Vercel 환경에서 실제 PNG 반환하는지).
-   - **I2 bind-mount uid 불일치** 는 compose 로컬 smoke 전에만 유의, 실 배포는 영향 없음.
+   - Alembic upgrade head 가 startup script 에 포함됐는지 확인 (`backend/Dockerfile` 엔트리).
+   - Vercel 배포(FE): `NEXT_PUBLIC_API_BASE` 환경변수 + OG route edge runtime 실제 PNG 반환 검증.
 
-**3. Docker 실 smoke** — 로컬 `docker` CLI 설치 후 `docker compose up` 엔드투엔드. I2 uid 가이드 (`sudo chown -R 1000 ./data` 또는 `--user $(id -u)`) 준수 필요.
+**3. Docker 실 smoke** — 로컬 `docker` CLI 설치 후 `docker compose up` 엔드투엔드. I2 uid 가이드 (`sudo chown -R 1000 ./data` 또는 `--user $(id -u)`) 준수 필요. 배포 전 마지막 안전망.
 
-**4. A-6 / A-7 nice-to-have** — `seed_pitchers.py` KBO 프로필 수확기. A-5 의 lazy write-back 이 이미 기존 시드 풀을 커버하므로 신규 시드 전용이며 우선순위 낮음.
+**4. A-6 nice-to-have** — `seed_pitchers.py` KBO 프로필 수확기. A-5 의 lazy write-back 이 이미 기존 시드 풀을 커버하므로 신규 시드 전용이며 우선순위 낮음.
+
+**5. 포스트시즌 재검증 여지** — A-7 은 2026-04-15 (정규시즌 5경기 날짜) 에서만 검증됨. 시범/포스트시즌/더블헤더/우천취소 날짜에서는 `srId` 필터가 유의미할 수 있음. 가을 도달 시 `scripts/verify_srid.py` 재실행하여 응답 차이 확인 권장.
 
 ### 구조적 개선 현황
 - [x] **H1** `.claude/hooks/code-reviewer-gate.sh` 가 `git diff --name-only origin/main...HEAD` 브랜치-레벨 diff 로 post-commit silent-pass 차단. 마커 `<contenthash>@<shortsha>` 포함 (PR #8, 세션 10).
@@ -172,7 +179,7 @@ main=`14c7e20`. 세션 10 에서 PR #7/#8/#9/#10/#11 연속 처리. **배포 이
 
 - [x] **A-5.** `pitchers.kbo_player_id` + `daily_schedules.home/away_starter_kbo_id` 컬럼, `match_pitcher_by_kbo_id()` 헬퍼, 스케줄러 ID-first 분기 + lazy write-back (세션 10, PR #10). Alembic 0002 roundtrip clean, pytest 12/12. Write-back 로그는 PR #11 에서 DEBUG 로 하향.
 - [ ] **A-6.** `seed_pitchers.py` KBO 프로필 수확기 — A-5 의 lazy write-back 이 기존 시드 투수를 이미 커버. 신규 시드 투수 초기 freshness 전용으로 우선순위 낮음.
-- [ ] **A-7 (신규).** `crawler._fetch_kbo` `srId` 값 라이브 검증 — 코드 `0,1,3,4,5,7` vs CLAUDE.md 스펙 `0,9,6` 불일치. 실 KBO API 응답으로 정답 결정 후 한 쪽 수정. 세션 11 첫 턴 권장 (`kbo-data-crawler`).
+- [x] **A-7.** `crawler._fetch_kbo` `srId` 라이브 검증 완료 (세션 11, 2026-04-15). `scripts/verify_srid.py` 로 세 변종 모두 동일 응답 확인 → 정규시즌 기간 실질 no-op. CLAUDE.md §5 스펙을 코드값(`0,1,3,4,5,7`)으로 정정. 포스트시즌 도달 시 재검증 여지 있음.
 
 ### B. Phase 2 AI 실검증 ✅ (세션 8 완료)
 
@@ -210,6 +217,6 @@ main=`14c7e20`. 세션 10 에서 PR #7/#8/#9/#10/#11 연속 처리. **배포 이
 - [x] Dockerfile × 2 + docker-compose + GitHub Actions CI 스켈레톤 — 세션 9
 - [ ] 실 `docker build` 및 compose up 엔드투엔드 smoke (로컬 docker CLI 필요)
 - [ ] Vercel 배포(FE) — 환경변수 `NEXT_PUBLIC_API_BASE` 설정, OG route edge runtime 검증
-- [ ] Railway/Fly 배포(BE) — Postgres 프로비저닝 + `DATABASE_URL` 주입, `ANTHROPIC_API_KEY` secret, APScheduler 싱글톤 보장
+- [ ] Railway/Fly 배포(BE) — Postgres 프로비저닝 + `DATABASE_URL` 주입, `ANTHROPIC_API_KEY` secret. APScheduler 싱글톤 가드는 세션 11 에서 `SCHEDULER_ENABLED` 플래그로 해결됨 (웹 레플리카 false / 워커 파드 true).
 - [ ] 면책 고지 최종 copy review (엔터테인먼트 목적, 베팅 무관)
 - [ ] CI 게이트 강화 — PR 에서 alembic downgrade base → upgrade head 라운드트립 추가 검토

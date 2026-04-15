@@ -14,14 +14,23 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    scheduler = build_scheduler()
-    scheduler.start()
-    logger.info("[main] APScheduler started with %d job(s)", len(scheduler.get_jobs()))
+    # Singleton guard — in multi-replica deploys (Railway/Fly ≥ 2 instances)
+    # only one process must run APScheduler. Web pods set SCHEDULER_ENABLED=false;
+    # the dedicated worker pod sets it true. Left true in dev for convenience.
+    settings = get_settings()
+    scheduler = None
+    if settings.scheduler_enabled:
+        scheduler = build_scheduler()
+        scheduler.start()
+        logger.info("[main] APScheduler started with %d job(s)", len(scheduler.get_jobs()))
+    else:
+        logger.info("[main] APScheduler disabled (SCHEDULER_ENABLED=false)")
     try:
         yield
     finally:
-        scheduler.shutdown(wait=False)
-        logger.info("[main] APScheduler stopped")
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
+            logger.info("[main] APScheduler stopped")
 
 
 def create_app() -> FastAPI:

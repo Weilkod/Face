@@ -132,6 +132,17 @@ main=`14c7e20`. 세션 10 에서 PR #7/#8/#9/#10/#11 연속 처리. **배포 이
   · **I3 APScheduler 싱글톤** — `backend/app/main.py:17-18` lifespan 이 무조건 scheduler 기동. Railway/Fly 에서 replicas ≥ 2 이면 크롤/분석/퍼블리시 잡이 두 번 실행되어 `fortune_scores` 중복 write + Claude 토큰 2배 소모. 실 배포(세션 10) 전 `SCHEDULER_ENABLED` 플래그 또는 "scheduler 전용 워커 프로세스" 분리 필요.
   · **N1 compose 버전 요구사항** — `env_file.path/required` long-form 은 Compose v2.24+ (Jan 2024). 구버전은 파싱 실패.
 
+세션 12 산출물 (브랜치 `claude/session-12-a6-harvester`, origin/main 95d0873 기반 — 세션 11 PR 미머지 상태에서 병렬 착수):
+- **A-6 eager KBO 프로필 수확기 완료** — `seed_pitchers.py` 가 시드 직후 koreabaseball.com 을 호출해 신규 시드 투수의 `pitcher.kbo_player_id` (+ 비어있으면 `profile_photo` CDN URL) 를 즉시 채운다. A-5 의 lazy write-back 은 "다음 스케줄러 런에서 학습" 이지만 이건 "시드 즉시 학습" — 새 시드 투수의 freshness 0 구간을 없앤다.
+  · **엔드포인트 재발견**: 디스커버리 스크립트 불필요. 기존 `scripts/crawl_pitcher_images.py:184` 의 `kbo_search_player` 가 이미 `POST /Player/Search.aspx` (ASP.NET VIEWSTATE 폼) → `PitcherDetail` 링크 parse → 프로필 이미지 URL 추출 전체 체인을 sync 로 검증 완료. 이 모듈은 그 async 쌍둥이.
+  · **새 파일**: `backend/app/services/kbo_profile_harvester.py` — `HarvestResult(kbo_player_id, profile_photo_url)` dataclass + `harvest_profile(client, name, team)` 퍼블릭 API + `harvest_profile_standalone(name, team)` 편의 래퍼. `crawler._make_client` / `DEFAULT_HEADERS` / `GET_HEADER_OVERRIDE` / `RATE_LIMIT_S` / `_robots_allows` 전부 재사용. `/Player/Search.aspx` 와 `PitcherDetail` 페이지는 `/ws/` carve-out 바깥이라 표준 robots 체크를 통과.
+  · **`seed_pitchers.py` 통합**: argparse 플래그 3개 추가 (`--harvest` opt-in, `--dry-run` 롤백, `--pitcher-id N` 디버그 필터). 기본 실행은 기존 동작 그대로 — 회귀 0. harvest 패스는 JSON upsert 직후 단일 `session.flush()` 뒤에 돌고, 루프 종료 후 단일 `commit()` (dry-run 시 `rollback()`).
+  · **유닛 테스트 9건** (`backend/tests/test_profile_harvester.py`): happy path / retired-pitcher fallback / ambiguous multi-hit + warning / no candidates / search GET 에러 / detail GET 에러 (id 는 여전히 수확) / detail 이미지 누락 / __VIEWSTATE 누락 / 빈 이름 (HTTP 0회). autouse fixture 로 `_robots_allows` + `asyncio.sleep` 몽키패치하여 오프라인 실행.
+  · **실 KBO smoke (2026-04-15)**: `python scripts/seed_pitchers.py --harvest` → **10/10 hit** (원태인 69446 / 곽빈 68220 / 네일 54640 / 카스타노 54920 / 손주영 67143 / 박세웅 64021 / 임찬규 61101 / 문동주 52701 / 양현종 77637 / 하트 54930). 소요 ≈ 40초 (10 × 4 HTTP 콜 × 1초 rate limit). 2차 실행은 전부 `skipped` — 멱등성 확인. `--dry-run --pitcher-id 1` 로 NULL→수확→롤백 경로도 수동 검증 (post-rollback row 여전히 NULL).
+  · **photo_filled=0**: 10명 모두 manifest 로컬 경로 (`data/pitcher_images/kbo/NN_...jpg`) 가 이미 `profile_photo` 에 박혀있어 harvester 가 덮어쓰지 않음 — 세션 8 B-1 이 이 로컬 파일 기반으로 Claude Vision 검증한 상태를 보존. CDN URL 마이그레이션이 필요하면 별도 작업.
+  · **검증 체크리스트**: `pytest backend/tests -v` → 21/21 통과 (test_analyze_rollback 3 + test_kbo_id_matcher 9 + test_profile_harvester 9). import smoke OK. alembic upgrade head clean.
+  · **포스트시즌 재검증 여지**: KBO 검색 페이지의 ASP.NET 컨트롤 경로 (`ctl00$ctl00$ctl00$cphContents$...`) 가 시즌 전환 / 페이지 리뉴얼 시 변할 수 있음 — harvester 는 `__VIEWSTATE` / `btnSearch` 필드 누락 시 None 반환하므로 fail-soft 지만 다음 신규 시드 사이클에서 hit rate 모니터링 권장.
+
 ---
 
 ## [WPI] 세션 11 인계 (2026-04-14)
@@ -171,7 +182,7 @@ main=`14c7e20`. 세션 10 에서 PR #7/#8/#9/#10/#11 연속 처리. **배포 이
 ### A. 크롤러 마무리
 
 - [x] **A-5.** `pitchers.kbo_player_id` + `daily_schedules.home/away_starter_kbo_id` 컬럼, `match_pitcher_by_kbo_id()` 헬퍼, 스케줄러 ID-first 분기 + lazy write-back (세션 10, PR #10). Alembic 0002 roundtrip clean, pytest 12/12. Write-back 로그는 PR #11 에서 DEBUG 로 하향.
-- [ ] **A-6.** `seed_pitchers.py` KBO 프로필 수확기 — A-5 의 lazy write-back 이 기존 시드 투수를 이미 커버. 신규 시드 투수 초기 freshness 전용으로 우선순위 낮음.
+- [x] **A-6.** `seed_pitchers.py` KBO 프로필 수확기 (세션 12, 브랜치 `claude/session-12-a6-harvester`). `backend/app/services/kbo_profile_harvester.py` + `--harvest`/`--dry-run`/`--pitcher-id` 플래그 + 유닛 테스트 9건. 2026-04-15 실 smoke 10/10 hit, 멱등.
 - [ ] **A-7 (신규).** `crawler._fetch_kbo` `srId` 값 라이브 검증 — 코드 `0,1,3,4,5,7` vs CLAUDE.md 스펙 `0,9,6` 불일치. 실 KBO API 응답으로 정답 결정 후 한 쪽 수정. 세션 11 첫 턴 권장 (`kbo-data-crawler`).
 
 ### B. Phase 2 AI 실검증 ✅ (세션 8 완료)

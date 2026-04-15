@@ -153,20 +153,68 @@ def _normalize_name(name: str) -> str:
 # Review queue
 # ---------------------------------------------------------------------------
 
+# Module-scope asyncio.Lock protects the read-modify-write cycle on the review
+# queue JSON file. Concurrent `analyze_and_score_matchups` / `upsert_schedule`
+# coroutines can both reach `_append_review` on the same interpreter event loop
+# (e.g. when a retry cron fires while the 10:30 scoring job is still running)
+# and a naïve write would race — one coroutine's append would clobber the
+# other's. We also dedup on `(date, team, crawled_name)` inside the locked
+# critical section so a repeated crawl of the same TBD matchup doesn't grow
+# the queue unbounded. See CLAUDE.md §5 ("unknown names go to a review queue,
+# not silently dropped") + C-1 in the backlog.
+_review_queue_lock = asyncio.Lock()
 
-def _append_review(entry: dict) -> None:
-    """Append an unmatched-pitcher entry to the JSON review queue file."""
-    queue: list[dict] = []
-    if REVIEW_QUEUE_PATH.exists():
-        try:
-            with REVIEW_QUEUE_PATH.open("r", encoding="utf-8") as fh:
-                queue = json.load(fh)
-        except Exception:
-            queue = []
-    queue.append(entry)
+
+def _review_key(entry: dict) -> tuple[str, str, str]:
+    """Dedup key: (date, team, crawled_name). Empty strings for missing parts."""
+    return (
+        str(entry.get("date") or ""),
+        str(entry.get("team") or ""),
+        str(entry.get("crawled_name") or ""),
+    )
+
+
+def _read_queue_sync() -> list[dict]:
+    if not REVIEW_QUEUE_PATH.exists():
+        return []
+    try:
+        with REVIEW_QUEUE_PATH.open("r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception:
+        return []
+    return data if isinstance(data, list) else []
+
+
+def _write_queue_sync(queue: list[dict]) -> None:
     REVIEW_QUEUE_PATH.parent.mkdir(parents=True, exist_ok=True)
     with REVIEW_QUEUE_PATH.open("w", encoding="utf-8") as fh:
         json.dump(queue, fh, ensure_ascii=False, indent=2)
+
+
+async def _append_review(entry: dict) -> None:
+    """Append an unmatched-pitcher entry to the JSON review queue file.
+
+    Dedups on `(date, team, crawled_name)` — if an entry with the same key
+    already exists, the call is a no-op. File I/O is wrapped in
+    `asyncio.to_thread` and the full read-modify-write cycle is serialised
+    by a module-scope `asyncio.Lock` so concurrent callers on the same event
+    loop cannot clobber each other's appends.
+    """
+    async with _review_queue_lock:
+        queue = await asyncio.to_thread(_read_queue_sync)
+
+        key = _review_key(entry)
+        if any(_review_key(existing) == key for existing in queue):
+            logger.debug(
+                "[crawler] review dedup hit: team=%s crawled=%s — skipping append",
+                entry.get("team"),
+                entry.get("crawled_name") or entry.get("kbo_player_id"),
+            )
+            return
+
+        queue.append(entry)
+        await asyncio.to_thread(_write_queue_sync, queue)
+
     logger.warning(
         "[crawler] review queued: team=%s crawled=%s reason=%s",
         entry.get("team"),
@@ -468,7 +516,7 @@ async def match_pitcher_name(
         )
         return best_id
 
-    _append_review({
+    await _append_review({
         "date": game_date.isoformat() if game_date else datetime.now(KST).date().isoformat(),
         "team": team,
         "crawled_name": name,
@@ -589,7 +637,7 @@ async def upsert_schedule(
                     entry.game_date, entry.home_team,
                     existing.home_starter, entry.home_starter_name,
                 )
-                _append_review({
+                await _append_review({
                     "date": entry.game_date.isoformat(),
                     "team": entry.home_team,
                     "crawled_name": entry.home_starter_name,
@@ -609,7 +657,7 @@ async def upsert_schedule(
                     entry.game_date, entry.away_team,
                     existing.away_starter, entry.away_starter_name,
                 )
-                _append_review({
+                await _append_review({
                     "date": entry.game_date.isoformat(),
                     "team": entry.away_team,
                     "crawled_name": entry.away_starter_name,

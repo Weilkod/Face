@@ -42,7 +42,7 @@ HEADERS = {
 
 SR_VARIANTS = {
     "code_current (0,1,3,4,5,7)": "0,1,3,4,5,7",
-    "claude_md_spec (0,9,6)": "0,9,6",
+    "pre_session11_guess (0,9,6)": "0,9,6",
     "baseline (0)": "0",
 }
 
@@ -131,7 +131,6 @@ async def main() -> None:
             print(f"=== {label}  (srId={sr}) ===")
             print(json.dumps(result, ensure_ascii=False, indent=2))
             print()
-            await asyncio.sleep(1.0)
 
 
 if __name__ == "__main__":

@@ -51,14 +51,19 @@ jobs:
           DATABASE_URL: sqlite+aiosqlite:///${{ github.workspace }}/data/facemetrics.db
         run: python scripts/init_db.py
 
-      - name: Alembic roundtrip (upgrade head → downgrade base → upgrade head)
+      - name: Alembic roundtrip (downgrade base → upgrade head)
         env:
           DATABASE_URL: sqlite+aiosqlite:///${{ github.workspace }}/data/facemetrics.db
         working-directory: backend
         run: |
-          alembic upgrade head
-          alembic downgrade base
-          alembic upgrade head
+          set -euo pipefail
+          # Previous step already upgraded to head via scripts/init_db.py.
+          # Assert real migration work happens here so a silent no-op
+          # (e.g. script_location misconfig) can't pass this gate.
+          alembic downgrade base 2>&1 | tee /tmp/alembic_down.log
+          grep -q "Running downgrade" /tmp/alembic_down.log
+          alembic upgrade head 2>&1 | tee /tmp/alembic_up.log
+          grep -q "Running upgrade" /tmp/alembic_up.log
 
       - name: Import smoke
         run: python -c "from app.main import app; print('app import OK')"

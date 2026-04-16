@@ -81,9 +81,12 @@ def zodiac_sign_for(birth: date, signs: list[dict]) -> dict:
 
 
 def load_manifest_photo_map() -> dict[int, str]:
-    """Map manifest_index → repo-relative profile photo path.
+    """Map manifest_index → public profile photo URL.
 
-    Prefer KBO source (official), fall back to namuwiki.
+    Prefer KBO source (official CDN), fall back to namuwiki. We store the
+    manifest's `url` (a browser-loadable CDN URL) rather than the local `file`
+    path — the FE needs a URL the browser can hit directly, and the backend
+    face_analyzer already accepts both URLs and local paths.
     """
     if not MANIFEST_PATH.exists():
         return {}
@@ -93,13 +96,13 @@ def load_manifest_photo_map() -> dict[int, str]:
     for row in data.get("success", []):
         idx = row.get("index")
         src = row.get("source")
-        file_ = row.get("file")
-        if idx is None or not file_:
+        url = row.get("url")
+        if idx is None or not url:
             continue
         if src == "kbo":
-            by_index_kbo[idx] = file_
+            by_index_kbo[idx] = url
         elif src == "namuwiki":
-            by_index_namu[idx] = file_
+            by_index_namu[idx] = url
     merged: dict[int, str] = dict(by_index_namu)
     merged.update(by_index_kbo)  # KBO overrides namuwiki
     return merged

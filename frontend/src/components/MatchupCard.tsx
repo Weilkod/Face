@@ -8,6 +8,16 @@ import RadarChart from "./RadarChart";
 import AxisDetail from "./AxisDetail";
 import ShareButton from "./ShareButton";
 
+/**
+ * Only browser-loadable URLs count as renderable photos. DB may also store
+ * backend-relative paths (e.g. `data/pitcher_images/...`) that the browser
+ * can't resolve — we fall back to the initial letter in that case.
+ */
+function isRenderablePhotoUrl(value: string | null | undefined): value is string {
+  if (!value) return false;
+  return value.startsWith("http://") || value.startsWith("https://");
+}
+
 interface MatchupCardProps {
   summary: MatchupSummary;
   animationDelay?: number;
@@ -123,8 +133,18 @@ export default function MatchupCard({
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
           {/* Home pitcher */}
           <div className="flex items-center gap-3">
-            <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-coral-light">
-              <span className="text-xl font-bold text-coral">{homeInitial}</span>
+            <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-coral-light">
+              {isRenderablePhotoUrl(home_pitcher.profile_photo) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={home_pitcher.profile_photo}
+                  alt={home_pitcher.name}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+              ) : (
+                <span className="text-xl font-bold text-coral">{homeInitial}</span>
+              )}
             </div>
             <div>
               <div className="text-[11px] text-ink-faint">{home_pitcher.team}</div>
@@ -146,8 +166,18 @@ export default function MatchupCard({
                 ♟ {away_pitcher.zodiac_sign} · {away_pitcher.chinese_zodiac}띠
               </div>
             </div>
-            <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-mint-light">
-              <span className="text-xl font-bold text-mint-dark">{awayInitial}</span>
+            <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-mint-light">
+              {isRenderablePhotoUrl(away_pitcher.profile_photo) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={away_pitcher.profile_photo}
+                  alt={away_pitcher.name}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+              ) : (
+                <span className="text-xl font-bold text-mint-dark">{awayInitial}</span>
+              )}
             </div>
           </div>
         </div>

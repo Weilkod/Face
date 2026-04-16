@@ -28,10 +28,90 @@ from app.schemas.response import (
     MatchupDetail,
     PitcherScores,
 )
+from app.services.chemistry_calculator import calculate_chemistry
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _format_delta(delta: float) -> str:
+    """Pretty-print a chemistry delta as "+2", "-1.5", "+0" — always signed."""
+    if delta == 0:
+        return "+0"
+    return f"{delta:+g}"
+
+
+# Display expansions for terse calculator labels. Only the zodiac "중립" case is
+# expanded to the full phrase from draft.html §428 spec — element labels and
+# non-neutral zodiac labels stay as returned by chemistry_calculator.
+_ZODIAC_LABEL_DISPLAY: dict[str, str] = {
+    "중립": "상충도 상생도 아닌 중립 관계",
+}
+
+
+def _display_zodiac_label(label: str) -> str:
+    return _ZODIAC_LABEL_DISPLAY.get(label, label)
+
+
+def _build_chemistry_detail(
+    home_pitcher: Pitcher,
+    away_pitcher: Pitcher,
+    chemistry_score: float,
+) -> ChemistryDetail:
+    """Build the chemistry response block with rule-based label text.
+
+    Re-runs ``calculate_chemistry`` to populate ``zodiac_detail`` /
+    ``element_detail`` / ``chemistry_comment``. ``chemistry_score`` from the DB
+    remains the source of truth for the numeric value — we don't overwrite it
+    with ``breakdown.final`` to avoid any drift with the stored score that
+    scoring_engine already clamped.
+
+    Falls back to a blank-text ChemistryDetail (numeric score preserved) if the
+    pitcher rows are missing zodiac metadata — never raise to the client.
+    """
+    try:
+        breakdown = calculate_chemistry(
+            home_pitcher.chinese_zodiac,
+            away_pitcher.chinese_zodiac,
+            home_pitcher.zodiac_element,
+            away_pitcher.zodiac_element,
+        )
+    except ValueError as e:
+        logger.warning(
+            "[matchup] chemistry text skipped — %s (home_pid=%s, away_pid=%s)",
+            e, home_pitcher.pitcher_id, away_pitcher.pitcher_id,
+        )
+        return ChemistryDetail(
+            zodiac_detail=None,
+            element_detail=None,
+            chemistry_score=chemistry_score,
+            chemistry_comment=None,
+        )
+
+    zodiac_sign_delta = _format_delta(breakdown.zodiac_delta)
+    element_sign_delta = _format_delta(breakdown.element_delta)
+
+    zodiac_detail = (
+        f"{home_pitcher.chinese_zodiac}띠 vs {away_pitcher.chinese_zodiac}띠 — "
+        f"{_display_zodiac_label(breakdown.zodiac_label)} ({zodiac_sign_delta})"
+    )
+    element_detail = (
+        f"{home_pitcher.zodiac_sign}({home_pitcher.zodiac_element}) vs "
+        f"{away_pitcher.zodiac_sign}({away_pitcher.zodiac_element}) — "
+        f"{breakdown.element_label} ({element_sign_delta})"
+    )
+    chemistry_comment = (
+        f"운명력 상성 최종 {breakdown.final:g}점 "
+        f"(기본 {breakdown.base:g} + 띠 {zodiac_sign_delta} + 원소 {element_sign_delta})"
+    )
+
+    return ChemistryDetail(
+        zodiac_detail=zodiac_detail,
+        element_detail=element_detail,
+        chemistry_score=chemistry_score,
+        chemistry_comment=chemistry_comment,
+    )
 
 
 def _build_pitcher_scores(
@@ -182,14 +262,13 @@ async def get_matchup_detail(
         )
     schedule = schedule_rows[0] if schedule_rows else None
 
-    # Build chemistry detail — numeric score from DB; text fields populated
-    # once a dedicated chemistry_comment column is added to Matchup.
-    chemistry = ChemistryDetail(
-        zodiac_detail=None,
-        element_detail=None,
-        chemistry_score=matchup.chemistry_score,
-        chemistry_comment=None,
-    )
+    # Build chemistry detail — numeric score stays from DB (scoring_engine has
+    # already clamped it). Text fields are derived on-the-fly from the same
+    # rule-based module (chemistry_calculator) so they stay in lock-step with
+    # the stored score without needing a dedicated DB column. CLAUDE.md §2 —
+    # chemistry is rule-based, no AI, so re-deriving here is safe and cheap
+    # (pure function + lru_cache on JSON load).
+    chemistry = _build_chemistry_detail(home_pitcher, away_pitcher, matchup.chemistry_score)
 
     return MatchupDetail(
         matchup_id=matchup.matchup_id,

@@ -74,6 +74,20 @@ class TestBuildChemistryDetail:
         assert detail.zodiac_detail is not None
         assert "충 (-2)" in detail.zodiac_detail
 
+    def test_neutral_zodiac_uses_expanded_display_label(self) -> None:
+        # 자(쥐) + 사(뱀) fall through all zodiac rules → "중립".
+        # For display we expand this to the draft.html phrase to avoid the
+        # bare "중립" reading ambiguous in UI copy.
+        home = _pitcher(1, "Home", "자", "전갈자리", "물")
+        away = _pitcher(2, "Away", "사", "물병자리", "바람")
+        detail = _build_chemistry_detail(home, away, chemistry_score=2.0)
+
+        assert detail.zodiac_detail is not None
+        assert "상충도 상생도 아닌 중립 관계 (+0)" in detail.zodiac_detail
+        # The bare token "중립" should not leak through alone — readers would
+        # mistake it for an element-neutral label without the surrounding phrase.
+        assert " 중립 (" not in detail.zodiac_detail
+
     def test_invalid_zodiac_metadata_falls_back_to_blank_text(self) -> None:
         # Defence against unexpected DB values — must not raise to the client.
         home = _pitcher(1, "Home", "자", "전갈자리", "물")

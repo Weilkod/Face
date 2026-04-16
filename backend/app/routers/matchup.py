@@ -42,6 +42,18 @@ def _format_delta(delta: float) -> str:
     return f"{delta:+g}"
 
 
+# Display expansions for terse calculator labels. Only the zodiac "중립" case is
+# expanded to the full phrase from draft.html §428 spec — element labels and
+# non-neutral zodiac labels stay as returned by chemistry_calculator.
+_ZODIAC_LABEL_DISPLAY: dict[str, str] = {
+    "중립": "상충도 상생도 아닌 중립 관계",
+}
+
+
+def _display_zodiac_label(label: str) -> str:
+    return _ZODIAC_LABEL_DISPLAY.get(label, label)
+
+
 def _build_chemistry_detail(
     home_pitcher: Pitcher,
     away_pitcher: Pitcher,
@@ -82,7 +94,7 @@ def _build_chemistry_detail(
 
     zodiac_detail = (
         f"{home_pitcher.chinese_zodiac}띠 vs {away_pitcher.chinese_zodiac}띠 — "
-        f"{breakdown.zodiac_label} ({zodiac_sign_delta})"
+        f"{_display_zodiac_label(breakdown.zodiac_label)} ({zodiac_sign_delta})"
     )
     element_detail = (
         f"{home_pitcher.zodiac_sign}({home_pitcher.zodiac_element}) vs "

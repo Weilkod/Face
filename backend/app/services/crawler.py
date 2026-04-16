@@ -263,7 +263,7 @@ async def _fetch_kbo(
     form = {
         "date": game_date.strftime("%Y%m%d"),
         "leId": "1",
-        "srId": "0,1,3,4,5,7",
+        "srId": "0,9,6",
     }
     try:
         await asyncio.sleep(RATE_LIMIT_S)

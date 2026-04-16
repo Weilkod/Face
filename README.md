@@ -508,7 +508,7 @@ POST /admin/update-result/{matchup_id}
 
 **단일 소스 정책: `koreabaseball.com`.** 네이버 스포츠·스탯티즈·Daum 등 다른 호스트로의 fallback 경로는 만들지 않는다. 공식 사이트 안에서 직접 문제를 해결한다 (사용자 지침 2026-04-13). 유일한 out-of-band fallback 은 `httpx` 접근이 완전히 실패했을 때의 **Playwright headless** 이다. 투수 프로필 사진은 수집 소스 제한 없음 (CLAUDE.md §6, 2026-04-14 지침).
 
-**주 엔드포인트:** `POST https://www.koreabaseball.com/ws/Main.asmx/GetKboGameList` — form body `date=YYYYMMDD&leId=1&srId=0,1,3,4,5,7` (1군 정규시리즈 필터, `backend/app/services/crawler.py:266` 기준). 단일 호출로 경기 리스트 + 선발투수 playerId (`T_PIT_P_ID`/`B_PIT_P_ID`) + 한글 이름 + 팀 + 구장 + 경기 시작 시각 + 취소 플래그를 반환한다. 구버전 2-step (`GetTodayGames` + GameCenter HTML 스크레이프) 체인은 폐기.
+**주 엔드포인트:** `POST https://www.koreabaseball.com/ws/Main.asmx/GetKboGameList` — form body `date=YYYYMMDD&leId=1&srId=0,9,6` (1군 정규시리즈 필터, `backend/app/services/crawler.py:266` 기준). 단일 호출로 경기 리스트 + 선발투수 playerId (`T_PIT_P_ID`/`B_PIT_P_ID`) + 한글 이름 + 팀 + 구장 + 경기 시작 시각 + 취소 플래그를 반환한다. 구버전 2-step (`GetTodayGames` + GameCenter HTML 스크레이프) 체인은 폐기.
 
 **robots.txt 해석:** `/ws/` 는 blanket-disallow 이지만 KBO 공식 1군 일정 페이지 전체가 SPA 로 `/ws/` 에 의존한다. `services/crawler._robots_allows()` 는 `www.koreabaseball.com/ws/*` 에 한해 `True` 를 반환한다 (narrow carve-out; 다른 prefix/호스트는 정상 robots 적용). 결정 근거는 `PROGRESS.md §A-2` 세션 3 로그.
 

@@ -132,6 +132,11 @@ main=`14c7e20`. 세션 10 에서 PR #7/#8/#9/#10/#11 연속 처리. **배포 이
   · **I3 APScheduler 싱글톤** — `backend/app/main.py:17-18` lifespan 이 무조건 scheduler 기동. Railway/Fly 에서 replicas ≥ 2 이면 크롤/분석/퍼블리시 잡이 두 번 실행되어 `fortune_scores` 중복 write + Claude 토큰 2배 소모. 실 배포(세션 10) 전 `SCHEDULER_ENABLED` 플래그 또는 "scheduler 전용 워커 프로세스" 분리 필요.
   · **N1 compose 버전 요구사항** — `env_file.path/required` long-form 은 Compose v2.24+ (Jan 2024). 구버전은 파싱 실패.
 
+세션 11 산출물 (2026-04-16, 진행 중):
+- **A-7 C1 srId 라이브 검증 완료** — `kbo-data-crawler` 역할 에이전트로 `POST /ws/Main.asmx/GetKboGameList` 실 호출. 2026-04-16 / 04-10 두 날짜 × 두 srId 값(`"0,1,3,4,5,7"` vs `"0,9,6"`) 교차 검증 결과 **완전 동치** — 양쪽 다 1군 10구단 5경기, `SR_ID=0` 단일, 퓨처스/시범/올스타/포스트시즌 혼입 0. 추가 probe 로 `srId=""`, `srId="0"` 도 동일 결과 확인. 현재 KBO 정규시즌 payload 는 `SR_ID=0` 하나만 사용.
+- **사용자 결정: 옵션 A (코드→스펙 통일)** — `backend/app/services/crawler.py:266` `"0,1,3,4,5,7"` → `"0,9,6"`, `README.md:511` 스펙 문구 동기화. `CLAUDE.md` §5 는 원래 `0,9,6` 이라 변경 없음. 근거: 공식 사이트 devtools 관찰값이 `0,9,6` 이고 향후 KBO 가 `SR_ID=9` 같은 신규 코드를 붙일 때 더 안전. Legacy `scripts/test_crawl.py:39` 와 `KBO_CRAWLING_GUIDE.md` 는 코드 미사용 `GetTodayGames` 엔드포인트 문서라 건드리지 않음.
+- **검증**: `crawler.py` `ast.parse` OK. 런타임 import smoke 는 shell 의 `pydantic_settings` 미설치로 생략 (A-5 때 PR CI 에서 검증된 경로에 값만 바뀐 상태).
+
 ---
 
 ## [WPI] 세션 11 인계 (2026-04-14)
@@ -172,7 +177,7 @@ main=`14c7e20`. 세션 10 에서 PR #7/#8/#9/#10/#11 연속 처리. **배포 이
 
 - [x] **A-5.** `pitchers.kbo_player_id` + `daily_schedules.home/away_starter_kbo_id` 컬럼, `match_pitcher_by_kbo_id()` 헬퍼, 스케줄러 ID-first 분기 + lazy write-back (세션 10, PR #10). Alembic 0002 roundtrip clean, pytest 12/12. Write-back 로그는 PR #11 에서 DEBUG 로 하향.
 - [ ] **A-6.** `seed_pitchers.py` KBO 프로필 수확기 — A-5 의 lazy write-back 이 기존 시드 투수를 이미 커버. 신규 시드 투수 초기 freshness 전용으로 우선순위 낮음.
-- [ ] **A-7 (신규).** `crawler._fetch_kbo` `srId` 값 라이브 검증 — 코드 `0,1,3,4,5,7` vs CLAUDE.md 스펙 `0,9,6` 불일치. 실 KBO API 응답으로 정답 결정 후 한 쪽 수정. 세션 11 첫 턴 권장 (`kbo-data-crawler`).
+- [x] **A-7.** `crawler._fetch_kbo` `srId` 값 라이브 검증 완료 (세션 11, 2026-04-16). 실 KBO `POST /ws/Main.asmx/GetKboGameList` 를 2026-04-16 / 04-10 두 날짜 × 두 srId 값 (`"0,1,3,4,5,7"` vs `"0,9,6"`) 로 교차 호출 → **완전 동치**: 양쪽 다 1군 10구단 5경기, `SR_ID=0` 단일, 퓨처스/시범/올스타/포스트시즌 혼입 0. 사용자 결정으로 옵션 A (코드→스펙) 채택: `crawler.py:266` → `"0,9,6"`, `README.md:511` 스펙 문구 동기화. Legacy `scripts/test_crawl.py:39` 와 `KBO_CRAWLING_GUIDE.md` 는 코드 미사용 `GetTodayGames` 엔드포인트 문서라 건드리지 않음.
 
 ### B. Phase 2 AI 실검증 ✅ (세션 8 완료)
 

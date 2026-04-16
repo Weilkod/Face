@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// Route Segment Config — tell Next.js this handler's responses are
+// cacheable for 60s at the Segment Cache layer. Whether Next.js passes
+// through a browser-facing `Cache-Control` header on top of this is
+// version-dependent (14.2 strips it on dynamic handlers regardless), so
+// we rely on the Data Cache layer for dedup and leave browser caching
+// to whatever Next.js decides.
+export const revalidate = 60;
+
 /**
  * Backend-for-frontend proxy.
  *
@@ -33,12 +41,16 @@ function backendBaseUrl(): string {
 // an SSRF vector. The `/api/` prefix in the target URL is separately
 // hardcoded, so even without this guard an attacker can only reach paths
 // under `/api/*` on the upstream.
-const TRAVERSAL_PATTERNS = [/\.\./, /%2e%2e/i, /%2E%2E/];
-
+//
+// We match on full segment equality (not substring) so a legitimate path
+// segment like `photo%2e%2ejpg` — "photo..jpg" URL-encoded — doesn't
+// false-positive.
 function hasPathTraversal(segments: string[]): boolean {
-  return segments.some((seg) =>
-    TRAVERSAL_PATTERNS.some((re) => re.test(seg)),
-  );
+  return segments.some((seg) => {
+    if (seg === "..") return true;
+    const lower = seg.toLowerCase();
+    return lower === "%2e%2e";
+  });
 }
 
 export async function GET(
@@ -68,15 +80,12 @@ export async function GET(
     const body = await upstream.text();
     const contentType =
       upstream.headers.get("content-type") ?? "application/json";
-    // Note: we intentionally don't set `Cache-Control` here. Next.js 14's
-    // Route Handler pipeline strips custom Cache-Control from dynamic
-    // handlers (we read `request.nextUrl.search`, which makes the route
-    // dynamic). The primary dedup comes from the inner `fetch(…, {
-    // next: { revalidate: 60 } })` call above — multiple viewers share
-    // one upstream hit for 60s via Next.js's server-side Data Cache.
-    // Browser-side caching is left to Next.js defaults (no explicit
-    // header), which means repeat expands within the same viewport
-    // round-trip to the edge — cheap relative to the upstream call.
+    // Not setting Cache-Control: verified via smoke test that Next.js
+    // 14.2.3 strips it from dynamic Route Handler responses regardless
+    // of how it's set (constructor headers, `response.headers.set`, or
+    // `export const revalidate = 60` at segment level). Primary dedup
+    // comes from the inner `fetch(…, { next: { revalidate: 60 } })`
+    // Data Cache — one upstream hit per 60s across all viewers.
     return new NextResponse(body, {
       status: upstream.status,
       headers: { "content-type": contentType },

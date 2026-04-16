@@ -38,7 +38,8 @@ const AXIS_META = [
  */
 function pitcherNameSizeClass(name: string): string {
   const len = name.length;
-  if (len <= 3) return "text-xl";       // e.g. 원태인, 곽빈, 안우진
+  if (len === 0) return "text-base";    // safety guard for empty names
+  if (len <= 3) return "text-xl";       // e.g. 곽빈 (2), 원태인 (3)
   if (len === 4) return "text-lg";      // e.g. 김광현, 이대은
   if (len === 5) return "text-base";    // e.g. 에르난데스
   if (len === 6) return "text-sm";      // very long foreign names
@@ -175,9 +176,9 @@ export default function MatchupCard({
             </div>
           </div>
 
-          {/* VS — manually offset down so it sits roughly at the photo's
-              vertical center (photo is h-14 = 56px, so center ≈ 28px). */}
-          <span className="mt-[24px] text-xs font-medium text-ink-faint">VS</span>
+          {/* VS — offset down so it sits at the photo's vertical center.
+              Photo is h-14 = 56px, so center is at 28px → mt-7 (= 28px). */}
+          <span className="mt-7 text-xs font-medium text-ink-faint">VS</span>
 
           {/* Away pitcher */}
           <div className="flex flex-col items-center gap-1.5 text-center">

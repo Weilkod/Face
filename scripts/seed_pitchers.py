@@ -81,25 +81,43 @@ def zodiac_sign_for(birth: date, signs: list[dict]) -> dict:
 
 
 def load_manifest_photo_map() -> dict[int, str]:
-    """Map manifest_index → repo-relative profile photo path.
+    """Map manifest_index → public profile photo URL.
 
-    Prefer KBO source (official), fall back to namuwiki.
+    Prefer KBO source (official CDN), fall back to namuwiki. We store the
+    manifest's `url` (a browser-loadable CDN URL) rather than the local `file`
+    path — the FE needs a URL the browser can hit directly, and the backend
+    face_analyzer already accepts both URLs and local paths.
+
+    Older manifests (pre-URL-switch) populated `file` but not `url` on some
+    rows. Warn so the operator knows to re-run `crawl_pitcher_images.py`
+    instead of silently seeding without photos.
     """
     if not MANIFEST_PATH.exists():
         return {}
     data = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     by_index_kbo: dict[int, str] = {}
     by_index_namu: dict[int, str] = {}
+    rows_missing_url: list[str] = []
     for row in data.get("success", []):
         idx = row.get("index")
         src = row.get("source")
-        file_ = row.get("file")
-        if idx is None or not file_:
+        url = row.get("url")
+        if idx is None:
+            continue
+        if not url:
+            rows_missing_url.append(f"idx={idx} source={src} name={row.get('name')}")
             continue
         if src == "kbo":
-            by_index_kbo[idx] = file_
+            by_index_kbo[idx] = url
         elif src == "namuwiki":
-            by_index_namu[idx] = file_
+            by_index_namu[idx] = url
+    if rows_missing_url:
+        print(
+            "[seed] WARNING: manifest has %d row(s) without a `url` field — "
+            "re-run scripts/crawl_pitcher_images.py to regenerate. Affected: %s"
+            % (len(rows_missing_url), ", ".join(rows_missing_url)),
+            file=sys.stderr,
+        )
     merged: dict[int, str] = dict(by_index_namu)
     merged.update(by_index_kbo)  # KBO overrides namuwiki
     return merged

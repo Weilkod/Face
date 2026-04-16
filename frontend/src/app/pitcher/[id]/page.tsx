@@ -6,6 +6,16 @@ import Footer from "@/components/Footer";
 import { AxisScoreBar } from "@/components/ScoreBar";
 import ErrorBanner from "@/components/ErrorBanner";
 
+/**
+ * Only browser-loadable URLs count as renderable photos. DB may also store
+ * backend-relative paths (e.g. `data/pitcher_images/...`) that the browser
+ * can't resolve — we fall back to the initial letter in that case.
+ */
+function isRenderablePhotoUrl(value: string | null | undefined): value is string {
+  if (!value) return false;
+  return value.startsWith("http://") || value.startsWith("https://");
+}
+
 interface Props {
   params: { id: string };
 }
@@ -72,10 +82,20 @@ export default async function PitcherPage({ params }: Props) {
             {/* Profile card */}
             <div className="card-soft rounded-2xl bg-white p-6 ring-1 ring-black/5 sm:p-8">
               <div className="flex items-start gap-5">
-                <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-2xl bg-coral-light">
-                  <span className="text-3xl font-bold text-coral">
-                    {pitcher.name.charAt(0)}
-                  </span>
+                <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-coral-light">
+                  {isRenderablePhotoUrl(pitcher.profile_photo) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={pitcher.profile_photo}
+                      alt={pitcher.name}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span className="text-3xl font-bold text-coral">
+                      {pitcher.name.charAt(0)}
+                    </span>
+                  )}
                 </div>
                 <div className="flex-1">
                   <div className="text-xs text-ink-faint">{pitcher.team}</div>

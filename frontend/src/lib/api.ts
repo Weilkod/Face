@@ -15,9 +15,10 @@ import {
   MOCK_HISTORY_MATCHUPS,
 } from "@/data/mockMatchups";
 
-// Public URL — baked at build time, used by the browser. In production
-// (Vercel FE + Railway BE) this is the Railway public URL and is also a
-// valid server-side target, so INTERNAL_API_URL can be omitted.
+// Public URL — baked at build time, used by the browser as a fallback when
+// the same-origin BFF proxy isn't available (e.g. local dev mounted on a
+// different port). In production (Vercel FE + Railway BE) the browser
+// normally hits the `/bff/*` proxy (same origin, no CORS/env dependency).
 const PUBLIC_API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -29,8 +30,19 @@ const PUBLIC_API_URL =
 const INTERNAL_API_URL =
   process.env.INTERNAL_API_URL ?? PUBLIC_API_URL;
 
-const API_URL =
-  typeof window === "undefined" ? INTERNAL_API_URL : PUBLIC_API_URL;
+// Server (SSR/server components) → direct backend hit (fast, private network).
+// Browser → same-origin BFF proxy (`/bff/<rest>` strips the `/api/` prefix
+// the path arrives with) so we don't depend on `NEXT_PUBLIC_API_URL` being
+// baked into the bundle or CORS being configured.
+function resolveUrl(path: string): string {
+  if (typeof window === "undefined") {
+    return `${INTERNAL_API_URL}${path}`;
+  }
+  if (path.startsWith("/api/")) {
+    return `/bff/${path.slice("/api/".length)}`;
+  }
+  return `${PUBLIC_API_URL}${path}`;
+}
 
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 
@@ -39,9 +51,10 @@ const MOCK_GAME_DATE = "2026-04-14";
 const MOCK_ANALYZED_AT = "2026-04-14T00:00:00Z";
 
 async function fetchJson<T>(path: string): Promise<T> {
+  const url = resolveUrl(path);
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, {
+    res = await fetch(url, {
       next: { revalidate: 300 },
     });
   } catch (networkErr) {

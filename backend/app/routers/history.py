@@ -7,6 +7,8 @@ regardless of is_published status (historical review).
 
 from __future__ import annotations
 
+import logging
+from collections import defaultdict, deque
 from datetime import date
 from typing import Annotated, Optional
 
@@ -15,10 +17,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
+from app.models.daily_schedule import DailySchedule
 from app.models.matchup import Matchup
 from app.models.pitcher import Pitcher
-from app.routers._helpers import pitcher_summary
-from app.schemas.response import HistoryResponse, MatchupSummary
+from app.routers._helpers import format_game_time, pitcher_summary
+from app.schemas.response import HistoryMatchup, HistoryResponse
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -64,14 +69,50 @@ async def get_history(
         ).scalars().all()
     }
 
-    summaries: list[MatchupSummary] = []
+    # Batch-load DailySchedule rows for game_time lookup, grouped by
+    # (home_team, away_team). Doubleheaders produce 2 rows for the same key;
+    # neither table is keyed by game_number so we can't unambiguously pair
+    # them to matchups. Walk the group in game_time order as a FIFO queue so
+    # every matchup still gets a distinct schedule when a doubleheader exists,
+    # and warn so operators know the deterministic-but-imprecise pairing was
+    # used.
+    schedule_groups: dict[tuple[str, str], deque[DailySchedule]] = defaultdict(deque)
+    for s in (
+        await session.execute(
+            select(DailySchedule)
+            .where(DailySchedule.game_date == query_date)
+            .order_by(DailySchedule.game_time.asc().nulls_last())
+        )
+    ).scalars().all():
+        schedule_groups[(s.home_team, s.away_team)].append(s)
+
+    for key, group in schedule_groups.items():
+        if len(group) > 1:
+            logger.warning(
+                "[history:%s] doubleheader detected for %s@%s (%d schedule rows) — pairing by game_time order",
+                query_date, key[1], key[0], len(group),
+            )
+
+    history_matchups: list[HistoryMatchup] = []
     for m in rows:
         home = pitchers.get(m.home_pitcher_id)
         away = pitchers.get(m.away_pitcher_id)
         if home is None or away is None:
             continue
-        summaries.append(
-            MatchupSummary(
+
+        # Pop one schedule per matchup so doubleheader rows get distinct times.
+        # If the queue is empty (schedule missing or already consumed), fall
+        # back to None — game_time is optional.
+        group = schedule_groups.get((m.home_team, m.away_team))
+        schedule = group.popleft() if group else None
+
+        # prediction_correct: None if either side is missing
+        prediction_correct: Optional[bool] = None
+        if m.actual_winner is not None and m.predicted_winner is not None:
+            prediction_correct = m.predicted_winner == m.actual_winner
+
+        history_matchups.append(
+            HistoryMatchup(
                 matchup_id=m.matchup_id,
                 home_team=m.home_team,
                 away_team=m.away_team,
@@ -83,7 +124,12 @@ async def get_history(
                 predicted_winner=m.predicted_winner,
                 winner_comment=m.winner_comment,
                 chemistry_score=m.chemistry_score,
+                game_time=format_game_time(schedule.game_time if schedule else None),
+                series_label=None,
+                game_date=m.game_date,
+                actual_winner=m.actual_winner,
+                prediction_correct=prediction_correct,
             )
         )
 
-    return HistoryResponse(date=query_date, matchups=summaries)
+    return HistoryResponse(date=query_date, matchups=history_matchups)

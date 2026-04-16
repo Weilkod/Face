@@ -8,6 +8,7 @@ Both default to all-zero if no cached row exists yet.
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,17 +16,20 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
+from app.models.daily_schedule import DailySchedule
 from app.models.face_score import FaceScore
 from app.models.fortune_score import FortuneScore
 from app.models.matchup import Matchup
 from app.models.pitcher import Pitcher
-from app.routers._helpers import pitcher_summary
+from app.routers._helpers import format_game_time, pitcher_summary
 from app.schemas.response import (
     AxisBreakdown,
     ChemistryDetail,
     MatchupDetail,
     PitcherScores,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -153,6 +157,31 @@ async def get_matchup_detail(
     home_scores = _build_pitcher_scores(home_face, home_fortune)
     away_scores = _build_pitcher_scores(away_face, away_fortune)
 
+    # Load corresponding DailySchedule row to get game_time.
+    # Doubleheaders may yield 2 schedule rows for the same (date, home, away) —
+    # neither Matchup nor DailySchedule is keyed by game_number, so we can't
+    # unambiguously pair them. Pick the earliest game_time deterministically
+    # and warn so operators know a doubleheader case was hit.
+    schedule_rows = list(
+        (
+            await session.execute(
+                select(DailySchedule)
+                .where(
+                    DailySchedule.game_date == matchup.game_date,
+                    DailySchedule.home_team == matchup.home_team,
+                    DailySchedule.away_team == matchup.away_team,
+                )
+                .order_by(DailySchedule.game_time.asc().nulls_last())
+            )
+        ).scalars().all()
+    )
+    if len(schedule_rows) > 1:
+        logger.warning(
+            "[matchup:%d] doubleheader detected for %s %s@%s — picking earliest game_time",
+            matchup.matchup_id, matchup.game_date, matchup.away_team, matchup.home_team,
+        )
+    schedule = schedule_rows[0] if schedule_rows else None
+
     # Build chemistry detail — numeric score from DB; text fields populated
     # once a dedicated chemistry_comment column is added to Matchup.
     chemistry = ChemistryDetail(
@@ -168,11 +197,16 @@ async def get_matchup_detail(
         home_team=matchup.home_team,
         away_team=matchup.away_team,
         stadium=matchup.stadium,
+        game_time=format_game_time(schedule.game_time if schedule else None),
+        series_label=None,
         home_pitcher=pitcher_summary(home_pitcher),
         away_pitcher=pitcher_summary(away_pitcher),
         home_scores=home_scores,
         away_scores=away_scores,
+        home_total=matchup.home_total,
+        away_total=matchup.away_total,
         chemistry=chemistry,
+        chemistry_score=matchup.chemistry_score,
         predicted_winner=matchup.predicted_winner,
         winner_comment=matchup.winner_comment,
     )

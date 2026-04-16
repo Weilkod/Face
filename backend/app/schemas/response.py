@@ -110,11 +110,17 @@ class MatchupDetail(BaseModel):
     home_team: str
     away_team: str
     stadium: Optional[str] = None
+    # TODO: populate once DailySchedule.series_label column exists
+    series_label: Optional[str] = None
+    game_time: Optional[str] = None
     home_pitcher: PitcherSummary
     away_pitcher: PitcherSummary
     home_scores: PitcherScores
     away_scores: PitcherScores
+    home_total: int
+    away_total: int
     chemistry: ChemistryDetail
+    chemistry_score: float = Field(..., ge=0.0, le=4.0)
     predicted_winner: Optional[str] = None
     winner_comment: Optional[str] = None
 
@@ -182,11 +188,19 @@ class PitcherDetail(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class HistoryMatchup(MatchupSummary):
+    """History row — MatchupSummary + 결과 필드."""
+
+    game_date: date
+    actual_winner: Optional[str] = None
+    prediction_correct: Optional[bool] = None
+
+
 class HistoryResponse(BaseModel):
     """Response for GET /api/history."""
 
     date: date
-    matchups: list[MatchupSummary]
+    matchups: list[HistoryMatchup]
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +220,7 @@ class AccuracyResponse(BaseModel):
     total_predictions: int
     correct_predictions: int
     accuracy_rate: float
-    recent_7_days: PeriodAccuracy
+    recent_7_days: Optional[PeriodAccuracy] = None
 
 
 # ---------------------------------------------------------------------------

@@ -96,8 +96,9 @@ A-5/A-6 는 blocker 에서 nice-to-have 로 강등.
 
 ### C. 운영 잔여 (non-blocker)
 
-- [ ] `_append_review` dedup — 동일 `(date, team, side, name)` 중복 큐 방지
-- [ ] `_append_review` concurrency — fcntl lock 또는 `review_queue` DB 테이블 승격
+- [x] `_append_review` dedup — 동일 `(team, crawled_name, game_date[, kbo_player_id])` 중복 큐 방지 ✅ (Wave 2 Track F)
+- [x] `_append_review` TTL — resolved 24 h 이상 된 엔트리 lazy eviction ✅ (Wave 2 Track F)
+- [ ] `_append_review` concurrency — fcntl lock 또는 `review_queue` DB 테이블 승격 (미구현)
 - [ ] `publish_matchups` — `is_published.is_(False)` 필터 추가
 - [ ] `analyze_and_score_matchups` — pitcher `IN [...]` 배치 로드 (현재 게임당 SELECT 2회)
 - [ ] Alembic 도입 여부 결정 (prod Postgres 전환 전. dev SQLite 는 수동 ALTER 허용)
@@ -126,3 +127,86 @@ A-5/A-6 는 blocker 에서 nice-to-have 로 강등.
 - **Phase 4:** `app/routers/{today,matchup,pitcher,admin}.py`, Pydantic response schemas, pytest
 - **Phase 5:** `frontend/` — Next.js 14 App Router, shadcn/ui, Pretendard Variable, Recharts 레이더
 - **Phase 6:** docker-compose, 면책 고지, Vercel + Railway 배포, GitHub Actions 게이트, 공유 카드 PNG
+
+---
+
+### Wave 2 Track F 실행 결과 (2026-04-16)
+
+#### 저장소 결정: JSON 파일 유지
+
+DB 테이블 신설 없이 기존 `data/crawler_review_queue.json` 파일 유지.
+근거:
+- 읽기/쓰기 빈도 극저 (크롤러 실패 시만 append, 관리자 조회 시만 read)
+- Alembic 마이그레이션 불필요 → 운영 복잡도 최소화
+- Track C 인프라 복구(Postgres 전환) 전까지도 독립 동작 가능
+- 동시성 위험 있으나 08:00 crawl_job 이 단일 프로세스 내 순차 실행 — 현재 트래픽 수준에서 허용 가능
+
+#### Dedup 키 정의
+
+```
+(team, crawled_name, game_date, kbo_player_id)
+```
+
+- `crawled_name` 이 None 이 아닐 때: `kbo_player_id` 는 항상 None (key에서 제외)
+- `crawled_name` 이 None 일 때: `kbo_player_id` 포함 (동명이인 없는 ID 구분)
+- 중복 감지 시: 새 row 추가 금지, 기존 row 의 `created_at` 만 갱신 (lazy refresh)
+
+#### TTL 정책
+
+- **대상:** `resolved=True` + `resolved_at` 이 24시간 이전인 엔트리
+- **발동:** `_append_review()` 호출 시 (lazy eviction) — 읽기 경로에서는 미발동
+- **비대상:** `resolved=False` 엔트리는 운영자 개입이 필요하므로 절대 삭제 금지
+
+#### 스키마 확장 (기존 호출자 호환)
+
+`_append_review(entry, *, path=None)` 내부에서 기본값 stamp:
+- `created_at`: ISO8601 UTC (최초 진입 시)
+- `resolved`: False
+- `resolved_at`: None
+
+#### 엔드포인트 사양
+
+| 메서드 | 경로 | 쿼리/바디 | 응답 |
+|--------|------|-----------|------|
+| GET | `/admin/review-queue` | `?unresolved_only=bool&limit=int` | `list[ReviewQueueItem]` |
+| POST | `/admin/review-queue/resolve` | `ReviewQueueResolveRequest` (JSON body) | `ReviewQueueItem` (200) or 404 |
+
+인증: 없음 — 기존 admin 라우터 컨벤션 동일 (네트워크/프록시 레이어 위임).
+
+#### 테스트 결과
+
+```
+23 passed in 2.57s
+```
+
+커버 항목:
+- happy path 3건 append → JSON 파일 3개 엔트리
+- dedup: 동일 키 2번 → 1건 유지, created_at 갱신 확인
+- dedup: 다른 game_date → 별도 엔트리 생성 확인
+- dedup: crawled_name=None + 다른 kbo_player_id → 별도 엔트리
+- TTL: 25시간 전 resolved → 제거 확인
+- TTL: 1시간 전 resolved → 유지 확인
+- TTL: unresolved는 400시간 경과해도 유지
+- `_review_entry_key` 키 구성 검증 (3개 케이스)
+- `_ttl_evict` 단독 유닛 테스트 (3개 케이스)
+- GET /admin/review-queue: empty file, unresolved_only=True, False, limit 캡
+- POST /admin/review-queue/resolve: 성공, 404, kbo_player_id 키
+- ASGI httpx 통합 테스트 1건 (monkeypatch REVIEW_QUEUE_PATH)
+
+#### 미구현 (의도적 미포함)
+
+- `_append_review` 동시성 안전 (fcntl lock / DB 승격) — Track C 인프라 블록 이후 별도 Wave 과제
+- Alembic 마이그레이션 — JSON 유지 결정으로 불필요
+- `GET /admin/review-queue` 의 path injection 을 Query param 이 아닌 DI 로 교체 — 현재 함수 직접 호출 테스트로 충분
+
+#### 변경 파일
+
+- `.gitignore` — `data/crawler_review_queue.json` 추가
+- `backend/app/schemas/response.py` — `ReviewQueueItem`, `ReviewQueueResolveRequest` 신설
+- `backend/app/routers/__init__.py` — 신설
+- `backend/app/routers/admin.py` — `GET /admin/review-queue`, `POST /admin/review-queue/resolve` 신설
+- `backend/app/main.py` — admin router include 추가
+- `backend/tests/__init__.py` — 신설
+- `backend/tests/test_review_queue.py` — 23개 테스트 신설
+- `backend/pytest.ini` — asyncio_mode=auto 설정
+- `PROGRESS.md` — §C dedup/TTL 항목 완료 체크, 본 섹션 추가

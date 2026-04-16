@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.routers import admin as admin_router
 from app.scheduler import build_scheduler
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    app.include_router(admin_router.router)
 
     @app.get("/health", tags=["meta"])
     async def health() -> dict[str, str]:

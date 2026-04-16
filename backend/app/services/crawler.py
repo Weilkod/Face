@@ -48,7 +48,8 @@ import logging
 import re
 import unicodedata
 import urllib.robotparser
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
+from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -154,18 +155,101 @@ def _normalize_name(name: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _append_review(entry: dict) -> None:
-    """Append an unmatched-pitcher entry to the JSON review queue file."""
-    queue: list[dict] = []
-    if REVIEW_QUEUE_PATH.exists():
+def _review_entry_key(entry: dict) -> tuple:
+    """
+    Composite dedup key for a review queue entry.
+
+    Primary key: (team, crawled_name, game_date).
+    When crawled_name is None but kbo_player_id is present, include
+    kbo_player_id so two distinct unknown-ID entries are not collapsed.
+    """
+    team = entry.get("team")
+    crawled_name = entry.get("crawled_name")
+    game_date = entry.get("game_date") or entry.get("date")
+    kbo_player_id = entry.get("kbo_player_id") if crawled_name is None else None
+    return (team, crawled_name, game_date, kbo_player_id)
+
+
+def _ttl_evict(queue: list[dict]) -> list[dict]:
+    """
+    Remove resolved entries whose resolved_at is older than 24 hours.
+    Unresolved entries are never removed — they require manual operator action.
+    """
+    cutoff = datetime.now(timezone.utc).isoformat()
+    kept: list[dict] = []
+    for item in queue:
+        if not item.get("resolved", False):
+            kept.append(item)
+            continue
+        resolved_at = item.get("resolved_at")
+        if resolved_at is None:
+            kept.append(item)
+            continue
         try:
-            with REVIEW_QUEUE_PATH.open("r", encoding="utf-8") as fh:
+            resolved_dt = datetime.fromisoformat(resolved_at)
+            if resolved_dt.tzinfo is None:
+                resolved_dt = resolved_dt.replace(tzinfo=timezone.utc)
+            age_hours = (datetime.now(timezone.utc) - resolved_dt).total_seconds() / 3600
+            if age_hours < 24:
+                kept.append(item)
+            # else: silently drop — lazy TTL eviction
+        except ValueError:
+            kept.append(item)  # malformed timestamp — keep to be safe
+    return kept
+
+
+def _append_review(entry: dict, *, path: Optional[Path] = None) -> None:
+    """
+    Append an unmatched-pitcher entry to the JSON review queue file.
+
+    Behaviour:
+    - Stamps `created_at` (ISO8601 UTC), `resolved` (False), `resolved_at` (None)
+      if not already present, so callers do not need to supply these fields.
+    - Dedup: same (team, crawled_name, game_date[, kbo_player_id]) key is
+      skipped rather than appended again. `created_at` is updated on duplicate.
+    - TTL: resolved entries older than 24 h are evicted on each write (lazy).
+    - Accepts an optional `path` keyword argument for test monkeypatching;
+      defaults to the module-level REVIEW_QUEUE_PATH constant.
+    """
+    target_path: Path = path if path is not None else REVIEW_QUEUE_PATH
+
+    # Stamp mandatory schema fields onto the entry (in-place, non-destructive).
+    now_utc = datetime.now(timezone.utc).isoformat()
+    entry.setdefault("created_at", now_utc)
+    entry.setdefault("resolved", False)
+    entry.setdefault("resolved_at", None)
+
+    queue: list[dict] = []
+    if target_path.exists():
+        try:
+            with target_path.open("r", encoding="utf-8") as fh:
                 queue = json.load(fh)
         except Exception:
             queue = []
+
+    # TTL eviction before dedup check so that evicted slots do not block
+    # re-queueing the same pitcher on a new game date.
+    queue = _ttl_evict(queue)
+
+    # Dedup: skip append if same key already present; update created_at instead.
+    new_key = _review_entry_key(entry)
+    for existing in queue:
+        if _review_entry_key(existing) == new_key:
+            existing["created_at"] = now_utc  # refresh timestamp on duplicate
+            logger.debug(
+                "[crawler] review dedup skip: team=%s crawled=%s date=%s",
+                entry.get("team"),
+                entry.get("crawled_name") or entry.get("kbo_player_id"),
+                entry.get("game_date") or entry.get("date"),
+            )
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            with target_path.open("w", encoding="utf-8") as fh:
+                json.dump(queue, fh, ensure_ascii=False, indent=2)
+            return
+
     queue.append(entry)
-    REVIEW_QUEUE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with REVIEW_QUEUE_PATH.open("w", encoding="utf-8") as fh:
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    with target_path.open("w", encoding="utf-8") as fh:
         json.dump(queue, fh, ensure_ascii=False, indent=2)
     logger.warning(
         "[crawler] review queued: team=%s crawled=%s reason=%s",
@@ -441,13 +525,12 @@ async def match_pitcher_name(
         return best_id
 
     _append_review({
-        "date": game_date.isoformat() if game_date else datetime.now(KST).date().isoformat(),
+        "game_date": game_date.isoformat() if game_date else datetime.now(KST).date().isoformat(),
         "team": team,
         "crawled_name": name,
         "normalised_name": norm_name,
         "best_fuzzy_score": round(best_score, 1),
         "reason": f"no name match (best {best_score:.1f} < {FUZZY_THRESHOLD})",
-        "queued_at": datetime.now(KST).isoformat(),
     })
     return None
 

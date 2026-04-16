@@ -57,4 +57,5 @@ data/crawler_review_queue.json
 # Claude Code local
 .claude/settings.local.json
 .claude/.last-reviewed-hash
+.claude/worktrees/
 frontend/next-env.d.ts

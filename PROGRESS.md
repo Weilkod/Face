@@ -724,6 +724,50 @@ Nit: `ErrorBanner` 에서 raw error message(`fetch failed: Failed to fetch`) 가
 
 ---
 
+## Wave 2 Track E — `chem_score 이중 가산` Critical **False Alarm 판정** (2026-04-16)
+
+> Track E 커밋 `d791b5b` (브랜치 `claude/wave2-track-e-fe-live-integration-a4a6a3dc`) 에 대한 parent-session pre-commit code-reviewer 가 `scripts/create_sample_matchup.py:188-193` 의 `home_total`/`away_total` 계산을 "chem_score 이중 가산, 100점 초과 가능" Critical 로 지정. 본 세션에서 수식 직접 대조 + `fortune-domain-expert` 독립 검증 결과 **대수적 동등 — false alarm 으로 판정**. 기록 목적으로 섹션 추가.
+
+### 수식 대조
+
+| 경로 | 파일:라인 | 수식 |
+|------|----------|------|
+| 프로덕션 | `backend/app/services/scoring_engine.py:101, 107, 227` | `home_total = Σ_i (face_i + fortune_i + [chem_final if i=="destiny" else 0])` |
+| Track E 스크립트 | `scripts/create_sample_matchup.py:190-193` | `home_total = Σ_i (face_i + fortune_i) + chem_score` |
+
+두 식 모두 grand total 에 chem 이 **정확히 1회** 합산. reviewer 가 `+ chem_score` 를 `sum(...)` **내부** 로 오독한 것으로 추정 (실제 코드는 `sum(...)` 바깥에 붙은 단일 항).
+
+### fortune-domain-expert Verdict (요약)
+
+- **EQUIVALENT** (총점 산출 기준). 반례 없음.
+- "상성은 운명력 축에만 적용" invariant 는 per-axis 구조 자체를 DB 에 저장하지 않으므로 (matchups 테이블은 `home_total` / `away_total` / `chemistry_score` 3컬럼만 보유) 스크립트의 grand-total 병합은 실질 영향 없음.
+- 100점 초과 가능성 (destiny 최대 24 + 4축 최대 80 = 104) 은 프로덕션 수식에서도 동일 — spec 이 chemistry 자체만 `[0, 4]` clamp 하고 총점 전체 clamp 를 규정하지 않으므로 Track E 단독 버그 아님.
+
+### 같은 브리프에서 발견된 별개 구조적 차이 (Critical 아님, 후속 과제)
+
+`predicted_winner` 반환 타입/값 도메인이 프로덕션과 Track E 스크립트 사이에 다름.
+
+- 프로덕션 (`scoring_engine.py:159-172`): `predicted_winner` ∈ `{"home", "away", "tie"}` (3-valued enum). `Matchup.predicted_winner` 컬럼도 `String(8)` + nullable 로 이 enum 저장용 설계.
+- Track E (`scripts/create_sample_matchup.py:201-206`): `predicted_winner = home.name | away.name | None`. Korean pitcher name 을 그대로 저장.
+
+### 영향 분석
+
+- `backend/app/routers/accuracy.py:42` / `history.py:112` 가 `m.predicted_winner == m.actual_winner` 비교. Track E 샘플은 `actual_winner` 가 항상 NULL 이고 accuracy 라우터가 `actual_winner.isnot(None)` 로 필터하므로 **현재 시점 런타임 크래시 없음**.
+- Postgres 배포 시 `String(8)` 길이 제약이 문자열 길이 (Korean 3-char name ≈ 3 chars) 에는 안 걸리지만, 4글자 이상 외국인 이름 (예: "카스타노" 4 chars, "쿠에바스" 4 chars) 도 안전선 내. 단 스키마 의미 위반.
+- FE 가 `predicted_winner` 를 "home"/"away" 기반 UI 표시용으로 쓴다면 Track E 샘플에서 해당 UI 가 이상동작 가능 — FE 쪽 사용처 재확인 필요.
+
+### 후속 조치 (별도 이슈로 트래킹, 본 분기 A 범위 밖)
+
+- [ ] **Wave 2 Track E 후속 P-1**: `scripts/create_sample_matchup.py` 의 `predicted_winner` 계산을 프로덕션 `_winner_comment()` 호출로 교체하거나 최소한 `"home"/"away"/"tie"` enum 으로 통일. winner_comment 도 gap-크기 기반 4단계 프로덕션 로직 재사용. Track E merge 전에 fixup 커밋 권장.
+
+### 결론
+
+- **분기 A (false alarm) 확정.** Track E 커밋 `d791b5b` 의 `home_total` / `away_total` 계산은 프로덕션 수식과 대수적으로 동일하며 DB 저장 결과도 동일. Wave 3 Track G E2E 착수 가능.
+- code-reviewer 훅 마커는 이 false-alarm 사례를 기억하지 않으므로, 동일 수식이 재등장할 경우 미래 세션에서 같은 오판이 재발할 수 있음. 본 섹션이 그때 참조용 레퍼런스.
+- Track E 의 별개 predicted_winner 스키마 불일치는 Wave 2 후속 P-1 로 분리 트래킹.
+
+---
+
 ### Wave 2 Track F 실행 결과 (2026-04-16, v2 재작업)
 
 > **주의**: 최초 Track F 브랜치 (`claude/wave2-track-f-review-queue-fastapi-backend-dev`, PR #22) 는 agent worktree 가 stale base (`9281df3`, 세션 3) 에서 생성됐음이 PR 오픈 후 발견돼 DIRTY 머지 불가 판정. 해당 브랜치가 그대로 머지되면 Phase 4 admin 라우터 5개 + Track A BE 스키마 전체를 덮어써서 삭제됨. PR #22 는 close 후 main 기준 `claude/wave2-track-f-review-queue-v2` 브랜치에서 add-only 전략으로 재작업 (본 PR).

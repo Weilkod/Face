@@ -7,6 +7,7 @@ import type {
   AccuracyStats,
   HistoryMatchup,
   HistoryResponse,
+  TodayResponse,
 } from "@/types";
 import {
   MOCK_MATCHUPS,
@@ -35,7 +36,8 @@ async function fetchJson<T>(path: string): Promise<T> {
 
 export async function getTodayMatchups(): Promise<MatchupSummary[]> {
   if (USE_MOCK) return MOCK_MATCHUPS;
-  return fetchJson<MatchupSummary[]>("/api/today");
+  const response = await fetchJson<TodayResponse>("/api/today");
+  return response.matchups;
 }
 
 export async function getMatchupDetail(id: number): Promise<MatchupDetail> {

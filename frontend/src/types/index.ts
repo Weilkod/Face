@@ -121,3 +121,9 @@ export interface HistoryResponse {
   date: string;
   matchups: HistoryMatchup[];
 }
+
+export interface TodayResponse {
+  date: string;
+  day_of_week: string;
+  matchups: MatchupSummary[];
+}

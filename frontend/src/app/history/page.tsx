@@ -3,6 +3,7 @@ import { getHistory, getAccuracy } from "@/lib/api";
 import type { HistoryMatchup, AccuracyStats } from "@/types";
 import Footer from "@/components/Footer";
 import ScoreBar from "@/components/ScoreBar";
+import ErrorBanner from "@/components/ErrorBanner";
 
 interface Props {
   searchParams: { date?: string };
@@ -28,6 +29,7 @@ export default async function HistoryPage({ searchParams }: Props) {
   let matchups: HistoryMatchup[] = [];
   let accuracy: AccuracyStats | null = null;
   let error: string | null = null;
+  let isApiDown = false;
 
   try {
     [matchups, accuracy] = await Promise.all([
@@ -35,7 +37,9 @@ export default async function HistoryPage({ searchParams }: Props) {
       getAccuracy(),
     ]);
   } catch (e) {
-    error = e instanceof Error ? e.message : "데이터를 불러올 수 없습니다.";
+    const msg = e instanceof Error ? e.message : "데이터를 불러올 수 없습니다.";
+    error = msg;
+    isApiDown = msg.includes("fetch failed") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND");
   }
 
   const correctCount = matchups.filter((m) => m.prediction_correct).length;
@@ -132,9 +136,7 @@ export default async function HistoryPage({ searchParams }: Props) {
         </p>
 
         {error ? (
-          <div className="rounded-2xl bg-white p-8 text-center card-soft ring-1 ring-black/5">
-            <p className="text-ink-muted">{error}</p>
-          </div>
+          <ErrorBanner message={error} isApiDown={isApiDown} />
         ) : matchups.length === 0 ? (
           <div className="rounded-2xl bg-white p-8 text-center card-soft ring-1 ring-black/5">
             <p className="text-ink-muted">해당 날짜에 경기 기록이 없습니다.</p>

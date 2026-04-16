@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-"vercel-build": "next build"
+    "vercel-build": "next build"
   },
   "dependencies": {
     "@vercel/og": "^0.11.1",

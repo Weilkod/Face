@@ -5,7 +5,12 @@ RUN npm ci
 
 FROM node:20-alpine AS builder
 WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
+# Build arg — NEXT_PUBLIC_* vars must be present at build time to be
+# inlined into the client bundle. Default works for local dev; compose
+# overrides it via `build.args`.
+ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
+    NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY frontend/ ./
 RUN npm run build

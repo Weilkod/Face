@@ -19,8 +19,16 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        # Baked into the Next.js bundle at build time for the browser.
+        # The host-mapped port (8000) is what end-users reach.
+        - NEXT_PUBLIC_API_URL=http://localhost:8000
     environment:
-      - NEXT_PUBLIC_API_BASE=http://localhost:8000
+      # Mirror for Node runtime (server components may re-read env).
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      # Server-side only — Next.js SSR running inside the FE container
+      # reaches the backend via the compose network, not `localhost`.
+      - INTERNAL_API_URL=http://backend:8000
     ports:
       - "3000:3000"
     depends_on:

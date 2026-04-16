@@ -61,25 +61,28 @@ Wave 내 Track 병렬, Wave 간 의존. Critical Path: Track A → Track E → T
 
 ## 진행 중 TODO
 
-### Phase 7 Wave 4 — Deploy (Wave 3 완료)
+### Phase 7 Wave 4 — Deploy (진행 중)
 
-- [ ] **Track I-1 Docker Compose 로컬 smoke** (docker CLI 필요)
-  - `docker compose up --build` → `http://localhost:3000` FE, `:8000/api/today` BE 확인
+- [x] **Track I-4 면책 고지 copy review** (2026-04-16). 3 유저 페이지 (`/`, `/history`, `/pitcher/[id]`) 의 `<Footer />` + OG route 인라인 + `layout.tsx` 메타데이터 모두 disclaimer 유지. 베팅/배당 affirmative 언급 0건. PASS.
+
+- [ ] **Track I-1 Docker Compose 로컬 smoke** (코드 패치 완료, daemon 이슈로 smoke 미실행)
+  - **적용 패치 (커밋됨)**:
+    1. `docker-compose.yml` — FE env 변수명 오타 수정 (`NEXT_PUBLIC_API_BASE` → `NEXT_PUBLIC_API_URL`), `INTERNAL_API_URL=http://backend:8000` 추가, build args 연결
+    2. `frontend/Dockerfile` — `ARG NEXT_PUBLIC_API_URL` + `ENV` 바인딩 (NEXT_PUBLIC_* 은 build time inline 필요)
+    3. `frontend/src/lib/api.ts` — SSR (`typeof window === 'undefined'`) 시 `INTERNAL_API_URL` 우선, browser 는 `NEXT_PUBLIC_API_URL`. Vercel+Railway prod 환경에서는 INTERNAL 미설정이라 fallthrough → NEXT_PUBLIC 사용 (호환).
+  - **남은 액션**: Docker Desktop daemon 재시작 후 `docker compose build && docker compose up -d` → :8000/api/today + :3000 응답 확인. 새 세션에서 진행.
   - **uid 가이드 (I2 이월)**: `sudo chown -R 1000 ./data` 또는 `docker compose run --user $(id -u)`
 
-- [ ] **Track I-2 Railway BE 배포**
-  - Postgres 프로비저닝 → `DATABASE_URL=postgresql+asyncpg://...`
-  - 환경변수: `ANTHROPIC_API_KEY`, `FRONTEND_ORIGIN`, **웹 서비스 `SCHEDULER_ENABLED=false`**
+- [ ] **Track I-2 Railway BE 배포** (CLI 설치 완료: railway 4.37.4)
+  - `railway login` → `railway init` → `railway add postgres`
+  - 환경변수: `DATABASE_URL=postgresql+asyncpg://...` (Railway Postgres URL), `ANTHROPIC_API_KEY` (로컬 `backend/.env` 에서 이관), `FRONTEND_ORIGIN=<vercel-url>`, **웹 서비스 `SCHEDULER_ENABLED=false`**
   - **워커 서비스 분리** (replicas=1 고정, `SCHEDULER_ENABLED=true`) — 수평 확장 금지
-  - `alembic upgrade head` startup 확인
+  - Railway 가 `backend/Dockerfile` 자체 빌드 (CMD 가 `init_db.py && uvicorn` 이라 `alembic upgrade head` 자동)
 
-- [ ] **Track I-3 Vercel FE 배포**
-  - `NEXT_PUBLIC_API_URL` → Railway BE URL
-  - `NEXT_PUBLIC_USE_MOCK=false`
-  - OG route edge runtime 실 PNG 반환 검증
-
-- [ ] **Track I-4 면책 고지 최종 copy review**
-  - 모든 페이지 + OG 카드에 "엔터테인먼트 목적" 노출 확인 (CLAUDE.md §6)
+- [ ] **Track I-3 Vercel FE 배포** (CLI 설치 완료: vercel 51.4.0)
+  - `vercel login` → `vercel link` → `vercel deploy`
+  - 환경변수: `NEXT_PUBLIC_API_URL=<railway-be-url>`, `NEXT_PUBLIC_USE_MOCK=false`
+  - Vercel 은 Next.js 직접 빌드 (Dockerfile 무관). OG route edge runtime 실 PNG 반환 검증.
 
 ### 후속 과제 (non-blocker)
 

@@ -15,8 +15,22 @@ import {
   MOCK_HISTORY_MATCHUPS,
 } from "@/data/mockMatchups";
 
-const API_URL =
+// Public URL — baked at build time, used by the browser. In production
+// (Vercel FE + Railway BE) this is the Railway public URL and is also a
+// valid server-side target, so INTERNAL_API_URL can be omitted.
+const PUBLIC_API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+// Server-side-only override. Docker Compose sets this to the backend
+// service name (http://backend:8000) because `localhost` inside the FE
+// container resolves to the FE container itself, not the BE. In
+// non-containerised deploys this is unset and we fall through to
+// PUBLIC_API_URL.
+const INTERNAL_API_URL =
+  process.env.INTERNAL_API_URL ?? PUBLIC_API_URL;
+
+const API_URL =
+  typeof window === "undefined" ? INTERNAL_API_URL : PUBLIC_API_URL;
 
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 

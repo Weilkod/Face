@@ -16,9 +16,16 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
 COPY backend /app/backend
 COPY scripts /app/scripts
+# Ships rule JSON (zodiac_compatibility, constellation_elements) + seed
+# (pitchers_2026, pitcher_images/manifest) into the image. `.dockerignore`
+# filters out *.db / *.sqlite / binary pitcher images. Without this COPY,
+# `chemistry_calculator._load_zodiac_data()` raises FileNotFoundError on
+# any matchup detail request in production (Railway has no bind mount).
+# Locally, docker-compose bind-mounts ./data:/app/data which silently
+# overrides this layer — that's why the bug only shows on Railway.
+COPY data /app/data
 
 RUN useradd -u 1000 -m app \
- && mkdir -p /app/data \
  && chown -R app:app /app
 USER app
 

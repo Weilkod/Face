@@ -106,6 +106,8 @@ Wave 내 Track 병렬, Wave 간 의존. Critical Path: Track A → Track E → T
 - [ ] **Supabase DB 패스워드 로테이션 (옵션)**: 초기 세팅 시 패스워드가 세션 로그에 평문 노출됨. 보안 우선시 Supabase 대시보드에서 리셋 후 Railway `DATABASE_URL` 업데이트 권장.
 - [ ] **Vercel 프로젝트명 rename (옵션)**: 현재 "frontend" 로 생성됨. Vercel 대시보드에서 `facemetrics` 로 rename 가능 (도메인도 `facemetrics-weilkods-projects.vercel.app` 로 변경되니 Railway `FRONTEND_ORIGIN` 동시 업데이트 필요).
 - [ ] **I-G1 `create_sample_matchup.py` chemistry placement**: 프로덕션 `scoring_engine._build_axis_totals` 는 chem 을 destiny axis total 에 베이크하지만 샘플 스크립트는 `home_total` 에만 더함 (각 axis.total 엔 0 만큼만 영향). grand total 합은 일치하지만 destiny.total 이 chem_final 만큼 낮게 나와 radar chart / score bar 가 프로덕션과 미묘히 다름. Wave 3 Track G 실검증 중 발견. P-1 계열 sample-vs-prod 불일치.
+- [ ] **MatchupCard `zodiac_sign`/`chinese_zodiac` null guard**: `frontend/src/components/MatchupCard.tsx:170-175,196-204` 가 두 필드를 무가드 렌더 (`♟ {zodiac_sign}`, `{chinese_zodiac}띠`). 타입은 `string` 이지만 신규 크롤된 투수에 fortune 메타데이터가 미채워졌을 경우 `♟ undefined` / `undefined띠` 노출 위험. 조건부 렌더 가드 추가. PR `claude/fix-mobile-text-truncation-kFVb7` (5770381) code-reviewer 가 Important 로 플래그.
+- [ ] **MatchupCard 360px 실측 smoke**: 동 PR 에서 5자 이름 (`text-base` 14px) × 138px 컬럼 폭 width 계산상 통과하지만 실 디바이스/Playwright 측정 미수행. 360px 뷰포트에서 `에르난데스` 등 5자 이름이 한 줄에 들어가는지 + VS 가 사진 중심에 정렬되는지 스크린샷 확인 필요. CLAUDE.md §7 mobile-viewport 검증 항목.
 - [ ] **I-G2 DATABASE_URL 상대경로 취약성**: `sqlite+aiosqlite:///./data/facemetrics.db` 가 cwd 의존. `cd backend && uvicorn` 으로 기동하면 `backend/data/` 에 빈 DB 자동 생성되고 API 가 empty matchups 반환. **반드시 프로젝트 루트에서 `PYTHONPATH=backend python -m uvicorn app.main:app` 형태로 기동**. Track I-1 Dockerfile 에서 WORKDIR 가 루트로 고정되는지 확인 + README 기동 가이드 업데이트 필요.
 - [ ] **Wave 1 Track C 언블록**:
   - 옵션 1: 한국/미국 residential/VPS IP 에서 재실행

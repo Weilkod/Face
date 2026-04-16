@@ -8,7 +8,7 @@
 - **Spec:** `README.md` + `CLAUDE.md`
 - **DB URL (dev):** `sqlite+aiosqlite:///data/facemetrics.db`
 - **Stop hook:** `.claude/hooks/code-reviewer-gate.sh` — 코드 변경 시 자동 code-reviewer 호출
-- **main:** `4421c09` (2026-04-16 기준, 세션 12 + Phase 7 Wave 1/2 반영)
+- **main:** `9a55715` (2026-04-16 기준, Phase 7 Wave 3 Track H 반영)
 - **⚠️ 새 세션 시작 시:** 첫 턴에 반드시 `git fetch origin main && git log --oneline HEAD..origin/main` 실행. 다른 병렬 세션이 머지한 커밋이 있으면 `git pull --ff-only` 로 최신화 후 착수 — 과거에 중복 작업으로 PR 이 obsolete 된 선례 있음 (ARCHIVE.md §세션 11 참조).
 
 ---
@@ -54,6 +54,7 @@ Wave 내 Track 병렬, Wave 간 의존. Critical Path: Track A → Track E → T
 - [x] **Wave 1 Track D** 상성 로직 감사 + 96 테스트 (PR #18). PASS — 코드 수정 0.
 - [x] **Wave 2 Track E** FE 실 데이터 연동 (USE_MOCK=false, ErrorBanner, Empty state) — PR #21
 - [x] **Wave 2 Track F** review queue dedup/TTL + admin endpoints + 22 테스트 (PR #24 v2)
+- [x] **Wave 3 Track H** Wave 1–2 전체 code review + Critical 3 / Important 4 fix (`9a55715` + `<wave3h-followup>`). predicted_winner enum→name at response boundary, XOR validator on ReviewQueueResolveRequest, `threading.Lock` on review-queue I/O, re-resolve TTL guard, 5xx→isApiDown, ErrorBanner no-leak, sample script sqlite guard + KST. 141 → 151 tests.
 
 ---
 
@@ -68,11 +69,6 @@ Wave 내 Track 병렬, Wave 간 의존. Critical Path: Track A → Track E → T
   4. 프론트엔드에서 해당 데이터 렌더 확인
   - **주의**: Wave 1 Track C 가 WAF IP-allowlist 로 FAIL 상태이므로 실 크롤 경로는 VPS/한국 IP 환경에서 수행하거나, `scripts/create_sample_matchup.py` 로 합성 매치업 사용.
 
-- [ ] **Wave 3 Track H — Code Review**
-  1. Wave 1–2 전체 diff 대상 code-reviewer 에이전트 라운드
-  2. CLAUDE.md §2 scoring invariants 준수 확인
-  3. CLAUDE.md §4 coding conventions 준수 확인
-  4. 보안: CORS origin 하드코딩, API key 노출, SQL injection 등
 
 ### Phase 7 Wave 4 — Deploy (Wave 3 완료 후)
 
@@ -96,7 +92,7 @@ Wave 내 Track 병렬, Wave 간 의존. Critical Path: Track A → Track E → T
 
 ### 후속 과제 (non-blocker)
 
-- [ ] **P-1 Wave 2 Track E 후속**: `scripts/create_sample_matchup.py` 의 `predicted_winner` 계산을 프로덕션 `_winner_comment()` 호출로 교체하거나 최소 `"home"/"away"/"tie"` enum 으로 통일. 현재 FE 가 enum 기반 UI 를 쓸 경우 샘플 row 에서 이상동작 가능.
+- [ ] **Track I-2 prep: `/admin/*` 인증 gate**: 현재 dev-only로 열려 있음. Railway 배포 시 `Depends(require_admin_token)` + `APP_ENV==prod` 조건부 적용 필요. Wave 3 Track H 에서 Important 로 플래그됨.
 - [ ] **Wave 1 Track C 언블록**:
   - 옵션 1: 한국/미국 residential/VPS IP 에서 재실행
   - 옵션 2: Playwright headless fallback (`_fetch_kbo_playwright()` 별도 모듈)

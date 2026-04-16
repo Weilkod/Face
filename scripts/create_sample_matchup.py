@@ -17,6 +17,7 @@ import hashlib
 import sys
 from datetime import date, datetime, time
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BACKEND_DIR = PROJECT_ROOT / "backend"
@@ -25,6 +26,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from sqlalchemy import select  # noqa: E402
 
+from app.config import get_settings  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
 from app import models  # noqa: E402,F401  — import side-effects register ORM
 from app.models.pitcher import Pitcher  # noqa: E402
@@ -34,6 +36,8 @@ from app.models.daily_schedule import DailySchedule  # noqa: E402
 from app.models.matchup import Matchup  # noqa: E402
 from app.services.chemistry_calculator import chemistry_for_pitchers  # noqa: E402
 from app.services.hash_fallback import hash_face_scores, hash_fortune_scores  # noqa: E402
+
+KST = ZoneInfo("Asia/Seoul")
 
 # The two matchup pairs we will create
 # (home_pitcher_id, away_pitcher_id, home_team, away_team, stadium)
@@ -49,6 +53,15 @@ def _hash_score(seed: str) -> int:
 
 
 async def main(args: argparse.Namespace) -> None:
+    settings = get_settings()
+    if not settings.is_sqlite and not args.yes_production:
+        print(
+            f"[create_sample] ABORT: database_url={settings.database_url!r} is not SQLite.\n"
+            "  This script writes sample rows; refusing to target production.\n"
+            "  Pass --yes-production if you really mean it."
+        )
+        return
+
     target_date: date = args.date or date.today()
     season = target_date.year
 
@@ -112,7 +125,7 @@ async def main(args: argparse.Namespace) -> None:
                         dominance_detail=str(scores["dominance_detail"]),
                         destiny_detail=str(scores["destiny_detail"]),
                         overall_impression=str(scores["overall_impression"]),
-                        analyzed_at=datetime.utcnow(),
+                        analyzed_at=datetime.now(KST).replace(tzinfo=None),
                     )
                     session.add(face_row)
                     inserted_face += 1
@@ -198,16 +211,21 @@ async def main(args: argparse.Namespace) -> None:
             home_total_int = int(round(home_total))
             away_total_int = int(round(away_total))
 
+            # Match production scoring_engine._winner_comment() contract:
+            # DB stores "home"/"away"/"tie" enum; comment renders pitcher name.
             if home_total > away_total:
-                predicted_winner = home.name
+                predicted_winner = "home"
+                winner_name: str | None = home.name
             elif away_total > home_total:
-                predicted_winner = away.name
+                predicted_winner = "away"
+                winner_name = away.name
             else:
-                predicted_winner = None
+                predicted_winner = "tie"
+                winner_name = None
 
             winner_comment = (
-                f"{predicted_winner} 근소한 우세 — 관상과 운세가 그 편"
-                if predicted_winner else "완전한 균형 — 하늘도 결정을 못 내린 날"
+                f"{winner_name} 근소한 우세 — 관상과 운세가 그 편"
+                if winner_name else "완전한 균형 — 하늘도 결정을 못 내린 날"
             )
 
             # ----------------------------------------------------------------
@@ -280,7 +298,8 @@ async def main(args: argparse.Namespace) -> None:
                 print(
                     f"[matchup] INSERT {home.name} ({home_total_int}) vs "
                     f"{away.name} ({away_total_int}) "
-                    f"winner={predicted_winner} chem={chem_score} published=True"
+                    f"winner={predicted_winner}({winner_name or '—'}) "
+                    f"chem={chem_score} published=True"
                 )
             else:
                 print(
@@ -318,6 +337,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Roll back all writes at the end — preview mode.",
+    )
+    parser.add_argument(
+        "--yes-production",
+        action="store_true",
+        help="Override the sqlite-only guard. Only use on a test database.",
     )
     return parser.parse_args(argv)
 

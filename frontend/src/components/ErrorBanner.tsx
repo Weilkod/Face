@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+
 interface ErrorBannerProps {
   message: string;
   isApiDown?: boolean;
@@ -8,8 +10,16 @@ interface ErrorBannerProps {
 /**
  * Error banner with a reload button.
  * Used on pages where server-side fetches fail (backend down, network error, etc.)
+ *
+ * The raw `message` is logged to the browser console for developer
+ * troubleshooting but never rendered — it can contain backend paths, status
+ * codes, or stack-adjacent text that users shouldn't see.
  */
 export default function ErrorBanner({ message, isApiDown = false }: ErrorBannerProps) {
+  useEffect(() => {
+    console.error("[ErrorBanner]", message);
+  }, [message]);
+
   return (
     <div className="rounded-2xl bg-white p-8 text-center card-soft ring-1 ring-red-200">
       <p className="text-2xl mb-3">⚠️</p>
@@ -17,7 +27,9 @@ export default function ErrorBanner({ message, isApiDown = false }: ErrorBannerP
         {isApiDown ? "서버 연결 실패" : "데이터 로드 오류"}
       </p>
       <p className="text-sm text-ink-muted mb-6">
-        {isApiDown ? "데이터 서버에 연결할 수 없습니다." : message}
+        {isApiDown
+          ? "데이터 서버에 연결할 수 없습니다."
+          : "데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."}
       </p>
       <button
         onClick={() => window.location.reload()}

@@ -8,7 +8,7 @@
 - **Spec:** `README.md` + `CLAUDE.md`
 - **DB URL (dev):** `sqlite+aiosqlite:///data/facemetrics.db`
 - **Stop hook:** `.claude/hooks/code-reviewer-gate.sh` — 코드 변경 시 자동 code-reviewer 호출
-- **main:** `02d5b10` (2026-04-16 기준, Phase 7 Wave 3 Track H 반영)
+- **main:** `1b5cae5` (2026-04-16 기준, Phase 7 Wave 3 완료)
 - **⚠️ 새 세션 시작 시:** 첫 턴에 반드시 `git fetch origin main && git log --oneline HEAD..origin/main` 실행. 다른 병렬 세션이 머지한 커밋이 있으면 `git pull --ff-only` 로 최신화 후 착수 — 과거에 중복 작업으로 PR 이 obsolete 된 선례 있음 (ARCHIVE.md §세션 11 참조).
 
 ---

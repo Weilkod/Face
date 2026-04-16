@@ -31,6 +31,20 @@ const AXIS_META = [
   { key: "destiny" as const, icon: "✨", label: "운명력", labelEn: "Destiny" },
 ] as const;
 
+/**
+ * Pick a font-size class based on Korean name length so it always fits on a
+ * single line in the narrow per-pitcher column on mobile (360 px viewport).
+ * Foreign-player names like "에르난데스" (5 chars) must not wrap to two lines.
+ */
+function pitcherNameSizeClass(name: string): string {
+  const len = name.length;
+  if (len <= 3) return "text-xl";       // e.g. 원태인, 곽빈, 안우진
+  if (len === 4) return "text-lg";      // e.g. 김광현, 이대은
+  if (len === 5) return "text-base";    // e.g. 에르난데스
+  if (len === 6) return "text-sm";      // very long foreign names
+  return "text-xs";                     // edge cases
+}
+
 export default function MatchupCard({
   summary,
   animationDelay = 0,
@@ -129,10 +143,11 @@ export default function MatchupCard({
           )}
         </div>
 
-        {/* Team vs Team */}
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+        {/* Team vs Team — vertical column per pitcher so long names like
+            "에르난데스" never wrap. Order: photo → team → name → 자리 → 띠. */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-2 sm:gap-4">
           {/* Home pitcher */}
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col items-center gap-1.5 text-center">
             <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-coral-light">
               {isRenderablePhotoUrl(home_pitcher.profile_photo) ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -146,26 +161,26 @@ export default function MatchupCard({
                 <span className="text-xl font-bold text-coral">{homeInitial}</span>
               )}
             </div>
-            <div>
-              <div className="text-[11px] text-ink-faint">{home_pitcher.team}</div>
-              <div className="text-xl font-bold text-ink">{home_pitcher.name}</div>
-              <div className="mt-0.5 text-[11px] text-ink-muted">
-                ♟ {home_pitcher.zodiac_sign} · {home_pitcher.chinese_zodiac}띠
-              </div>
+            <div className="text-[11px] text-ink-faint">{home_pitcher.team}</div>
+            <div
+              className={`whitespace-nowrap font-bold text-ink ${pitcherNameSizeClass(home_pitcher.name)}`}
+            >
+              {home_pitcher.name}
+            </div>
+            <div className="whitespace-nowrap text-[11px] text-ink-muted">
+              ♟ {home_pitcher.zodiac_sign}
+            </div>
+            <div className="whitespace-nowrap text-[11px] text-ink-muted">
+              {home_pitcher.chinese_zodiac}띠
             </div>
           </div>
 
-          <span className="text-xs font-medium text-ink-faint">VS</span>
+          {/* VS — manually offset down so it sits roughly at the photo's
+              vertical center (photo is h-14 = 56px, so center ≈ 28px). */}
+          <span className="mt-[24px] text-xs font-medium text-ink-faint">VS</span>
 
           {/* Away pitcher */}
-          <div className="flex items-center justify-end gap-3">
-            <div className="text-right">
-              <div className="text-[11px] text-ink-faint">{away_pitcher.team}</div>
-              <div className="text-xl font-bold text-ink">{away_pitcher.name}</div>
-              <div className="mt-0.5 text-[11px] text-ink-muted">
-                ♟ {away_pitcher.zodiac_sign} · {away_pitcher.chinese_zodiac}띠
-              </div>
-            </div>
+          <div className="flex flex-col items-center gap-1.5 text-center">
             <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-mint-light">
               {isRenderablePhotoUrl(away_pitcher.profile_photo) ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -178,6 +193,18 @@ export default function MatchupCard({
               ) : (
                 <span className="text-xl font-bold text-mint-dark">{awayInitial}</span>
               )}
+            </div>
+            <div className="text-[11px] text-ink-faint">{away_pitcher.team}</div>
+            <div
+              className={`whitespace-nowrap font-bold text-ink ${pitcherNameSizeClass(away_pitcher.name)}`}
+            >
+              {away_pitcher.name}
+            </div>
+            <div className="whitespace-nowrap text-[11px] text-ink-muted">
+              ♟ {away_pitcher.zodiac_sign}
+            </div>
+            <div className="whitespace-nowrap text-[11px] text-ink-muted">
+              {away_pitcher.chinese_zodiac}띠
             </div>
           </div>
         </div>

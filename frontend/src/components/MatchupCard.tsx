@@ -43,20 +43,24 @@ export default function MatchupCard({
     series_label,
   } = summary;
 
+  async function fetchDetail() {
+    setDetailLoading(true);
+    setDetailError(null);
+    try {
+      const d = await getMatchupDetail(matchup_id);
+      setDetail(d);
+    } catch (e) {
+      setDetailError(e instanceof Error ? e.message : "상세 정보를 불러올 수 없습니다.");
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
   async function handleExpand() {
     const next = !isOpen;
     setIsOpen(next);
     if (next && detail === null && !detailLoading) {
-      setDetailLoading(true);
-      setDetailError(null);
-      try {
-        const d = await getMatchupDetail(matchup_id);
-        setDetail(d);
-      } catch (e) {
-        setDetailError(e instanceof Error ? e.message : "상세 정보를 불러올 수 없습니다.");
-      } finally {
-        setDetailLoading(false);
-      }
+      await fetchDetail();
     }
   }
 
@@ -212,7 +216,14 @@ export default function MatchupCard({
             {/* Error state */}
             {detailError && (
               <div className="rounded-2xl bg-red-50 p-6 text-center text-sm text-red-600">
-                {detailError}
+                <p className="mb-4">{detailError}</p>
+                <button
+                  onClick={fetchDetail}
+                  disabled={detailLoading}
+                  className="inline-flex items-center gap-2 rounded-full bg-coral px-5 py-2 text-xs font-semibold text-white transition hover:bg-coral/90 min-h-[44px] disabled:opacity-50"
+                >
+                  다시 시도
+                </button>
               </div>
             )}
 

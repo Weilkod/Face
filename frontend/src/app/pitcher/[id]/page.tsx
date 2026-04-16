@@ -4,6 +4,7 @@ import type { PitcherDetail } from "@/types";
 import RadarChart from "@/components/RadarChart";
 import Footer from "@/components/Footer";
 import { AxisScoreBar } from "@/components/ScoreBar";
+import ErrorBanner from "@/components/ErrorBanner";
 
 interface Props {
   params: { id: string };
@@ -21,11 +22,14 @@ export default async function PitcherPage({ params }: Props) {
   const pitcherId = parseInt(params.id, 10);
   let pitcher: PitcherDetail | null = null;
   let error: string | null = null;
+  let isApiDown = false;
 
   try {
     pitcher = await getPitcher(pitcherId);
   } catch (e) {
-    error = e instanceof Error ? e.message : "투수 정보를 불러올 수 없습니다.";
+    const msg = e instanceof Error ? e.message : "투수 정보를 불러올 수 없습니다.";
+    error = msg;
+    isApiDown = msg.includes("fetch failed") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND");
   }
 
   const face = pitcher?.face_scores ?? null;
@@ -58,9 +62,11 @@ export default async function PitcherPage({ params }: Props) {
           오늘의 매치업으로 돌아가기
         </Link>
 
-        {error || !pitcher ? (
+        {error ? (
+          <ErrorBanner message={error} isApiDown={isApiDown} />
+        ) : !pitcher ? (
           <div className="rounded-2xl bg-white p-8 text-center card-soft ring-1 ring-black/5">
-            <p className="text-ink-muted">{error ?? "투수를 찾을 수 없습니다."}</p>
+            <p className="text-ink-muted">투수를 찾을 수 없습니다.</p>
           </div>
         ) : (
           <div className="space-y-6">

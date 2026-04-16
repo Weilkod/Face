@@ -8,8 +8,36 @@
 - **Spec:** `README.md` + `CLAUDE.md`
 - **DB URL (dev):** `sqlite+aiosqlite:///data/facemetrics.db`
 - **Stop hook:** `.claude/hooks/code-reviewer-gate.sh` — 코드 변경 시 자동 code-reviewer 호출
-- **main:** `6ad3fbb` (2026-04-16 기준, Wave 3 완료 + Wave 4 Track I-4 PASS, I-1 패치 적용)
+- **main:** `c3f380d` (2026-04-16 기준, Wave 3 완료 + Wave 4 Track I-1/I-2/I-3/I-4 전부 PASS — 프로덕션 런치 완료)
+- **Prod URLs:** BE `https://face-production-0f00.up.railway.app` (Railway + Supabase Postgres session pooler), FE `https://frontend-weilkods-projects.vercel.app` (Vercel).
 - **⚠️ 새 세션 시작 시:** 첫 턴에 반드시 `git fetch origin main && git log --oneline HEAD..origin/main` 실행. 다른 병렬 세션이 머지한 커밋이 있으면 `git pull --ff-only` 로 최신화 후 착수 — 과거에 중복 작업으로 PR 이 obsolete 된 선례 있음 (ARCHIVE.md §세션 11 참조).
+
+---
+
+## 🔥 다음 세션 우선 순위 — 프로덕션 DB 시딩
+
+프로덕션 배포는 완료됐지만 Supabase Postgres 가 비어있어 FE 가 empty-state 만 렌더함. 실 matchup 이 보이도록 시드 필요.
+
+**선결 조건:** Supabase session pooler URL 확보 (Railway `DATABASE_URL` 과 동일한 값). Supabase 대시보드 → Project Settings → Database → Session pooler.
+
+**순서 (로컬에서 Supabase 에 직접 write):**
+1. 프로젝트 루트에서 임시 env 로 시드 실행 — `.env` 건드리지 말고 명령줄 override 사용
+2. **선수 프로필 수확** (KBO 홈페이지에서 출생정보/혈액형 긁어오기, 한국 IP 필수):
+   ```bash
+   DATABASE_URL="postgresql+asyncpg://postgres.czhnskoroaxuvczyngrr:...@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres" \
+     python scripts/seed_pitchers.py --harvest
+   ```
+   → `pitchers` 테이블에 10명 upsert, 멱등. A-6 로직 (세션 12, PR #13) 기준 10/10 hit.
+3. **관상/운세 스코어 생성** (Claude Vision + Text 실호출, ~$1 예상): `/admin/trigger-analyze` POST 또는 로컬에서 `scripts/analyze_all_pitchers.py` 계열 (없으면 즉석 작성).
+4. **샘플 matchup 생성** — `scripts/create_sample_matchup.py` (단, I-G1 chemistry placement 버그 있음, destiny.total 만 살짝 낮음. 프로덕션 `publish_matchups` 경로가 정석).
+5. FE `https://frontend-weilkods-projects.vercel.app` 접속해 실 매치업 카드 렌더 확인. SSR `revalidate: 300` 이라 최대 5분 캐시 — 필요시 Vercel redeploy 로 즉시 무효화.
+
+**주의:**
+- 스케줄러 `SCHEDULER_ENABLED=false` 상태라 자동 파이프라인 안 돔. 수동 시드 또는 워커 서비스 분리 필요.
+- Railway BE 에서 KBO 크롤 안 됨 (WAF). 시드는 **반드시 로컬 한국 IP 에서**.
+- `/admin/*` 엔드포인트가 prod 에서도 무인증 노출 중 (후속 과제 참조). 시딩 끝나면 바로 인증 gate 추가 권장.
+
+시드 완료 후에는: Wave 4 Track I-2/I-3 follow-up 클로즈 + 필요 시 워커 서비스 분리 착수.
 
 ---
 
@@ -65,28 +93,18 @@ Wave 내 Track 병렬, Wave 간 의존. Critical Path: Track A → Track E → T
 
 - [x] **Track I-4 면책 고지 copy review** (2026-04-16). 3 유저 페이지 (`/`, `/history`, `/pitcher/[id]`) 의 `<Footer />` + OG route 인라인 + `layout.tsx` 메타데이터 모두 disclaimer 유지. 베팅/배당 affirmative 언급 0건. PASS.
 
-- [ ] **Track I-1 Docker Compose 로컬 smoke** (코드 패치 완료, daemon 이슈로 smoke 미실행)
-  - **적용 패치 (커밋됨)**:
-    1. `docker-compose.yml` — FE env 변수명 오타 수정 (`NEXT_PUBLIC_API_BASE` → `NEXT_PUBLIC_API_URL`), `INTERNAL_API_URL=http://backend:8000` 추가, build args 연결
-    2. `frontend/Dockerfile` — `ARG NEXT_PUBLIC_API_URL` + `ENV` 바인딩 (NEXT_PUBLIC_* 은 build time inline 필요)
-    3. `frontend/src/lib/api.ts` — SSR (`typeof window === 'undefined'`) 시 `INTERNAL_API_URL` 우선, browser 는 `NEXT_PUBLIC_API_URL`. Vercel+Railway prod 환경에서는 INTERNAL 미설정이라 fallthrough → NEXT_PUBLIC 사용 (호환).
-  - **남은 액션**: Docker Desktop daemon 재시작 후 `docker compose build && docker compose up -d` → :8000/api/today + :3000 응답 확인. 새 세션에서 진행.
-  - **uid 가이드 (I2 이월)**: `sudo chown -R 1000 ./data` 또는 `docker compose run --user $(id -u)`
+- [x] **Track I-1 Docker Compose 로컬 smoke** (2026-04-16). `docker compose build` 성공 (FE build 43s, BE alembic upgrade head 자동), `docker compose up -d` 후 7개 엔드포인트 검증: BE `/api/today` (2 matchup, predicted_winner name resolve — `곽빈`/`양현종`, enum leak 0), BE `/api/matchup/1`, BE `/api/history?date=2026-04-14`, FE `/`, `/history`, `/pitcher/1` 모두 200 + 엔터테인먼트 disclaimer 유지, OG `/api/og/matchup/1` 200 `image/png` edge runtime. SSR→INTERNAL_API_URL + browser→NEXT_PUBLIC_API_URL split 정상 동작 확인.
 
-- [ ] **Track I-2 Railway BE 배포** (CLI 설치 완료: railway 4.37.4)
-  - `railway login` → `railway init` → `railway add postgres`
-  - 환경변수: `DATABASE_URL=postgresql+asyncpg://...` (Railway Postgres URL), `ANTHROPIC_API_KEY` (로컬 `backend/.env` 에서 이관), `FRONTEND_ORIGIN=<vercel-url>`, **웹 서비스 `SCHEDULER_ENABLED=false`**
-  - **워커 서비스 분리** (replicas=1 고정, `SCHEDULER_ENABLED=true`) — 수평 확장 금지
-  - Railway 가 `backend/Dockerfile` 자체 빌드 (CMD 가 `init_db.py && uvicorn` 이라 `alembic upgrade head` 자동)
+- [x] **Track I-2 Railway BE 배포** (2026-04-16). 기존 `perpetual-passion/Face` 서비스 재사용 (c3f380d 배포됨). DB 는 Supabase 무료 플랜 Postgres 로 연결 — Direct connection (`db.XXX.supabase.co`) 은 free-tier IPv6-only 라 Railway 에서 `[Errno 101] Network is unreachable` 실패, **Session pooler** (`aws-1-ap-southeast-1.pooler.supabase.com:5432`) 로 전환해 성공. 배포 시 `scripts/init_db.py` 가 alembic 0001→0002 자동 적용. 환경변수: `DATABASE_URL=postgresql+asyncpg://postgres.<ref>:PASS@<pooler>/postgres`, `ANTHROPIC_API_KEY` (기존), `APP_ENV=prod`, `SCHEDULER_ENABLED=false`, `FRONTEND_ORIGIN=https://frontend-weilkods-projects.vercel.app`. 공개 URL: `https://face-production-0f00.up.railway.app`. `/api/today`/`/health`/`/docs` 전부 200.
 
-- [ ] **Track I-3 Vercel FE 배포** (CLI 설치 완료: vercel 51.4.0)
-  - `vercel login` → `vercel link` → `vercel deploy`
-  - 환경변수: `NEXT_PUBLIC_API_URL=<railway-be-url>`, `NEXT_PUBLIC_USE_MOCK=false`
-  - Vercel 은 Next.js 직접 빌드 (Dockerfile 무관). OG route edge runtime 실 PNG 반환 검증.
+- [x] **Track I-3 Vercel FE 배포** (2026-04-16). `weilkods-projects/frontend` 프로젝트 신규 생성. 환경변수 `NEXT_PUBLIC_API_URL=https://face-production-0f00.up.railway.app`, `NEXT_PUBLIC_USE_MOCK=false` production 타깃에 추가 후 `vercel deploy --prod`. **Vercel Authentication (Standard Protection) 기본 ON → 401 반환, 대시보드 Deployment Protection 에서 Disabled 로 수동 토글 필요**. Production URL: `https://frontend-weilkods-projects.vercel.app`. `/`, `/history`, `/api/og/matchup/1` (edge runtime, `image/png`) 전부 200. SSR 이 `NEXT_PUBLIC_API_URL` 로 Railway BE 직접 페치 (INTERNAL_API_URL 미설정 → public fallthrough 경로), empty-state 렌더 확인 ("경기가 없는 날이거나 선발투수 발표 전일 수 있습니다"), enum-leak 0.
 
 ### 후속 과제 (non-blocker)
 
-- [ ] **Track I-2 prep: `/admin/*` 인증 gate**: 현재 dev-only로 열려 있음. Railway 배포 시 `Depends(require_admin_token)` + `APP_ENV==prod` 조건부 적용 필요. Wave 3 Track H 에서 Important 로 플래그됨.
+- [ ] **프로덕션 DB 시딩**: Supabase Postgres 는 alembic 스키마만 있고 pitchers/matchups 데이터 없음. `/api/today` 가 `{matchups:[]}` 라 FE 는 empty-state 렌더. 시드 방안: (1) 로컬에서 `DATABASE_URL=<session-pooler-url> python scripts/seed_pitchers.py --harvest` 로 선수 프로필 수확 후 (2) `scripts/create_sample_matchup.py` 로 샘플 matchup 생성, 또는 (3) 워커 서비스 띄워 스케줄러 돌리기 — 단, Railway 미국 리전은 KBO 크롤이 한국 IP WAF 에 블록됨 (Wave 1 Track C FAIL 참조).
+- [ ] **프로덕션 `/admin/*` 인증 gate**: 현재 dev-only로 열려 있고 prod 에도 그대로 노출됨. `Depends(require_admin_token)` + `APP_ENV==prod` 조건부 적용 필요. Wave 3 Track H 에서 Important 로 플래그된 사항이 prod 에서도 미해결. 특히 `/admin/review-queue/resolve` 가 무인증 상태라 조기 차단 권장.
+- [ ] **Supabase DB 패스워드 로테이션 (옵션)**: 초기 세팅 시 패스워드가 세션 로그에 평문 노출됨. 보안 우선시 Supabase 대시보드에서 리셋 후 Railway `DATABASE_URL` 업데이트 권장.
+- [ ] **Vercel 프로젝트명 rename (옵션)**: 현재 "frontend" 로 생성됨. Vercel 대시보드에서 `facemetrics` 로 rename 가능 (도메인도 `facemetrics-weilkods-projects.vercel.app` 로 변경되니 Railway `FRONTEND_ORIGIN` 동시 업데이트 필요).
 - [ ] **I-G1 `create_sample_matchup.py` chemistry placement**: 프로덕션 `scoring_engine._build_axis_totals` 는 chem 을 destiny axis total 에 베이크하지만 샘플 스크립트는 `home_total` 에만 더함 (각 axis.total 엔 0 만큼만 영향). grand total 합은 일치하지만 destiny.total 이 chem_final 만큼 낮게 나와 radar chart / score bar 가 프로덕션과 미묘히 다름. Wave 3 Track G 실검증 중 발견. P-1 계열 sample-vs-prod 불일치.
 - [ ] **I-G2 DATABASE_URL 상대경로 취약성**: `sqlite+aiosqlite:///./data/facemetrics.db` 가 cwd 의존. `cd backend && uvicorn` 으로 기동하면 `backend/data/` 에 빈 DB 자동 생성되고 API 가 empty matchups 반환. **반드시 프로젝트 루트에서 `PYTHONPATH=backend python -m uvicorn app.main:app` 형태로 기동**. Track I-1 Dockerfile 에서 WORKDIR 가 루트로 고정되는지 확인 + README 기동 가이드 업데이트 필요.
 - [ ] **Wave 1 Track C 언블록**:

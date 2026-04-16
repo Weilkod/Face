@@ -884,6 +884,36 @@ facemetrics/
 └── README.md                          # 본 스펙
 ```
 
+### 9-3. Vercel 프로젝트 설정 (FE 배포)
+
+Next.js 앱은 저장소 루트가 아닌 `frontend/` 서브폴더에 있다. 따라서 Vercel
+프로젝트(`weilkods-projects/frontend`, id `prj_Ta5QB27i2PX3yIUFJ8N4ifubWgvl`)
+의 **Root Directory** 설정이 반드시 `frontend` 를 가리켜야 한다. 루트에는
+`package.json` · `next.config.mjs` · `app/` 이 없어서, Vercel 이 루트에서
+`next build` 를 돌리면 `Couldn't find any pages or app directory` 로 실패한다.
+
+| 항목 | 값 | 비고 |
+|------|-----|------|
+| Root Directory | `frontend` | **필수**. Dashboard → Settings → General → Root Directory. |
+| Framework Preset | Next.js | Root Directory 를 세팅하면 `frontend/package.json` 을 읽어 자동 감지. |
+| Build Command | (기본값) | 비워두면 preset 기본인 `next build`. 오버라이드가 필요하면 `npm run vercel-build` (동일 동작). |
+| Install Command | (기본값) | 비워둠. |
+| Output Directory | (기본값) | 비워둠. `next.config.mjs` 의 `output: 'standalone'` 은 Docker 셀프-호스트용이며 Vercel 은 무시하고 `.next/` 를 직접 쓴다. `.next/standalone/` 로 바꾸지 말 것. |
+| Node.js Version | 20.x | `frontend/Dockerfile` 과 CI 매칭. |
+
+`frontend/package.json` 에는 `"vercel-build": "next build"` 가 포함되어 있어,
+Dashboard 에서 Build Command 를 `npm run vercel-build` 로 강제해도 정상 동작한다.
+이 스크립트는 제거하지 말고 안전망으로 유지한다.
+
+**검증 체크리스트** — Dashboard 수정 후 preview 배포 로그에서 확인:
+
+- [ ] `Detected Next.js version: 14.x` 로그 출력
+- [ ] `✓ Compiled successfully` 이후 라우트 목록에 `/`, `/history`,
+      `/pitcher/[id]`, `/api/og/matchup/[id]`, `/bff/[...path]` 가 모두 찍힘
+- [ ] Dashboard → **Functions** 탭에 `/api/og/matchup/[id]` (Edge Runtime) 과
+      `/bff/[...path]` (Serverless) 함수가 리스트업됨 — 비어있으면 Framework
+      auto-detect 가 활성화되지 않은 것이므로 Root Directory 를 재확인
+
 ---
 
 ## 10. 확장 가능성

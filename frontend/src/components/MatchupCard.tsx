@@ -14,10 +14,10 @@ interface MatchupCardProps {
 }
 
 const AXIS_META = [
-  { key: "command" as const, icon: "🎯", label: "제구력", labelEn: "Command" },
-  { key: "stuff" as const, icon: "💥", label: "구위", labelEn: "Stuff" },
-  { key: "composure" as const, icon: "🧘", label: "멘탈", labelEn: "Composure" },
-  { key: "dominance" as const, icon: "👑", label: "지배력", labelEn: "Dominance" },
+  { key: "command" as const, icon: "🎯", label: "혜안력", labelEn: "Command" },
+  { key: "stuff" as const, icon: "💥", label: "결행력", labelEn: "Stuff" },
+  { key: "composure" as const, icon: "🧘", label: "평정력", labelEn: "Composure" },
+  { key: "dominance" as const, icon: "👑", label: "상승운", labelEn: "Dominance" },
   { key: "destiny" as const, icon: "✨", label: "운명력", labelEn: "Destiny" },
 ] as const;
 

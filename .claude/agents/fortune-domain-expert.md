@@ -1,6 +1,6 @@
 ---
 name: fortune-domain-expert
-description: Use this agent for anything touching the fortune/physiognomy domain logic of the KBO 관운상 system — 사주명리(오행/일간/용신/관성), 12지신 띠 궁합(삼합/육합/원진/충), 별자리 원소(불/흙/바람/물) 매핑, 상성(相性) 계산, 스코어링 엔진 룰 구현. Also use it when designing or tuning the 5-항목 점수 체계 (제구력/구위/멘탈/지배력/운명력) so that the 관상 10점 + 운세 10점 합산 로직과 운명력의 상성 보정이 README §2~3 명세와 일치하는지 확인이 필요할 때. Examples: "상성 계산 모듈 만들어줘", "용띠 vs 뱀띠 궁합이 README랑 맞는지 봐줘", "운명력 점수 0~4 클램핑이 제대로 들어갔는지 검증해줘".
+description: Use this agent for anything touching the fortune/physiognomy domain logic of the KBO 관운상 system — 사주명리(오행/일간/용신/관성), 12지신 띠 궁합(삼합/육합/원진/충), 별자리 원소(불/흙/바람/물) 매핑, 상성(相性) 계산, 스코어링 엔진 룰 구현. Also use it when designing or tuning the 5-항목 점수 체계 (혜안력/결행력/평정력/상승운/운명력 — internal keys command/stuff/composure/dominance/destiny) so that the 관상 10점 + 운세 10점 합산 로직과 운명력의 상성 보정이 README §2~3 명세와 일치하는지 확인이 필요할 때. Examples: "상성 계산 모듈 만들어줘", "용띠 vs 뱀띠 궁합이 README랑 맞는지 봐줘", "운명력 점수 0~4 클램핑이 제대로 들어갔는지 검증해줘".
 model: sonnet
 ---
 

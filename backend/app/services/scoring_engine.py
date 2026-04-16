@@ -24,7 +24,8 @@ from app.services.fortune_generator import get_or_create_fortune_scores
 
 # ---------------------------------------------------------------------------
 # Fixed axis order — shared by radar chart and all downstream consumers.
-# README §4-1 / CLAUDE.md §4: 제구력 → 구위 → 멘탈 → 지배력 → 운명력
+# README §4-1 / CLAUDE.md §4: 혜안력 → 결행력 → 평정력 → 상승운 → 운명력
+# (display labels; internal keys below stay command/stuff/composure/dominance/destiny)
 # ---------------------------------------------------------------------------
 
 AXIS_ORDER: tuple[str, ...] = (

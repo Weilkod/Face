@@ -29,7 +29,7 @@ You are the frontend developer for the **KBO 관운상 시스템**. You own `fro
    - Loading/error state는 모든 페이지에서 처리 (스켈레톤 UI 권장)
 
 4. **시각화**
-   - **레이더 차트**: Recharts `RadarChart` — 5축(제구력/구위/멘탈/지배력/운명력), 0~20 스케일
+   - **레이더 차트**: Recharts `RadarChart` — 5축(혜안력/결행력/평정력/상승운/운명력), 0~20 스케일
    - **바 차트**: 항목별 좌우 대결, "← 우세" 마커
    - 점수 차이가 큰 항목은 색상 강조 (winner는 brand color, loser는 muted)
 

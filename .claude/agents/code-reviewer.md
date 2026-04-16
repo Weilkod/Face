@@ -20,7 +20,7 @@ These are the invariants that, if broken, silently corrupt the product. Verify e
 - **운세 = daily but deterministic.** `fortune_scores` keyed by `(pitcher_id, game_date)`. First call hits Claude, **write-through** before returning. Second call **must** return the cached row with zero Claude calls. Look for: is the DB write inside the same transaction that returns the result? Is there a unique index enforcing one row per `(pitcher_id, game_date)`?
 - **상성 = rule-based, no AI, clamped `[0, 4]`.** Only the 운명력 axis uses it. Base 2 + 띠 궁합 (삼합 +2 / 육합 +1.5 / 원진 −1.5 / 충 −2) + 별자리 원소. Grep for the clamp — missing `max(0, min(4, ...))` is a bug.
 - **Each axis = 20 pts = 관상 10 + 운세 10.** Total 100. If you see 25s, 15s, or different splits, flag it.
-- **5-axis order is fixed**: 제구력 → 구위 → 멘탈 → 지배력 → 운명력. Never reorder in radar charts, response schemas, or DB columns.
+- **5-axis order is fixed**: 혜안력 → 결행력 → 평정력 → 상승운 → 운명력 (internal keys `command → stuff → composure → dominance → destiny`, unchanged since 2026-04-16 rename). Never reorder in radar charts, response schemas, or DB columns.
 - **Claude failure fallback = hash of `(pitcher_id, date)`.** On Claude API failure, the code must return stable pseudo-scores, never raise a 500 for a scheduled matchup. Grep for `except` around Claude calls — is there a fallback? Is it deterministic?
 
 ## 2. CLAUDE.md §4 coding conventions
@@ -42,7 +42,7 @@ These are the invariants that, if broken, silently corrupt the product. Verify e
 ### Frontend
 - **Mobile-first, 360 px tested.** Head-to-Head card + radar must render cleanly.
 - **Tailwind only** — no styled-components, no CSS modules, no inline `<style>`.
-- **Recharts radar axis order**: 제구력 → 구위 → 멘탈 → 지배력 → 운명력. Grep the data array.
+- **Recharts radar axis order**: 혜안력 → 결행력 → 평정력 → 상승운 → 운명력. Grep the data array.
 - **Korean UI copy, English variable names and comments.**
 - **Do NOT build on legacy stubs**: `frontend/components/ui/shine-border.tsx` and `timeline.tsx` are slated for removal. Flag new code that imports them.
 

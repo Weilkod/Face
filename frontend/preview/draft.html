@@ -236,12 +236,12 @@
             <!-- 5항목 상세 -->
             <div class="space-y-4">
 
-              <!-- 제구력 -->
+              <!-- 혜안력 -->
               <div class="rounded-xl border border-black/5 bg-white p-5">
                 <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div class="flex items-center gap-2">
                     <span>🎯</span>
-                    <span class="text-sm font-semibold text-ink">제구력 · Command</span>
+                    <span class="text-sm font-semibold text-ink">혜안력 · Command</span>
                   </div>
                   <div class="flex items-center gap-1.5 text-[11px] font-semibold">
                     <span class="text-coral">(16, 엔스)</span>
@@ -272,12 +272,12 @@
                 </div>
               </div>
 
-              <!-- 구위 -->
+              <!-- 결행력 -->
               <div class="rounded-xl border border-black/5 bg-white p-5">
                 <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div class="flex items-center gap-2">
                     <span>💥</span>
-                    <span class="text-sm font-semibold text-ink">구위 · Stuff</span>
+                    <span class="text-sm font-semibold text-ink">결행력 · Stuff</span>
                   </div>
                   <div class="flex items-center gap-1.5 text-[11px] font-semibold">
                     <span class="text-coral">(17, 엔스)</span>
@@ -308,12 +308,12 @@
                 </div>
               </div>
 
-              <!-- 멘탈 -->
+              <!-- 평정력 -->
               <div class="rounded-xl border border-black/5 bg-white p-5">
                 <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div class="flex items-center gap-2">
                     <span>🧘</span>
-                    <span class="text-sm font-semibold text-ink">멘탈 · Composure</span>
+                    <span class="text-sm font-semibold text-ink">평정력 · Composure</span>
                   </div>
                   <div class="flex items-center gap-1.5 text-[11px] font-semibold">
                     <span class="text-coral">(15, 엔스)</span>
@@ -344,12 +344,12 @@
                 </div>
               </div>
 
-              <!-- 지배력 -->
+              <!-- 상승운 -->
               <div class="rounded-xl border border-black/5 bg-white p-5">
                 <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div class="flex items-center gap-2">
                     <span>👑</span>
-                    <span class="text-sm font-semibold text-ink">지배력 · Dominance</span>
+                    <span class="text-sm font-semibold text-ink">상승운 · Dominance</span>
                   </div>
                   <div class="flex items-center gap-1.5 text-[11px] font-semibold">
                     <span class="text-coral">(18, 엔스)</span>
@@ -694,7 +694,7 @@
   function generateRadar(el) {
     const home = el.dataset.home.split(',').map(Number);
     const away = el.dataset.away.split(',').map(Number);
-    const labels = ['제구력', '구위', '멘탈', '지배력', '운명력'];
+    const labels = ['혜안력', '결행력', '평정력', '상승운', '운명력'];
     const cx = 170, cy = 180, maxR = 130;
 
     const pt = (ratio, i) => {

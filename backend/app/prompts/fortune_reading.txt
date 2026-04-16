@@ -1,4 +1,4 @@
-# version: 2026-04-13-v1
+# version: 2026-04-16-v2  (축 한글 라벨: 혜안력/결행력/평정력/상승운/운명력 — 내부 키 불변)
 # Implements README §4-2 (운세 분석 프롬프트, Claude Text)
 # CACHE-STABLE: ===SYSTEM=== block contains no variables — safe for ephemeral prompt caching.
 # ===USER=== block uses str.format() placeholders:
@@ -45,19 +45,19 @@
 
 ## 평가 항목 (README §4-2 기준)
 
-1. 제구력 운세 (command_fortune) — 오늘의 집중운·정밀운 (10점)
+1. 혜안력 운세 (command_fortune) — 오늘의 집중운·정밀운 (10점)
    - 별자리 집중운(4), 띠 정밀운(3), 사주 일간 기운(3)
    - "집중", "세밀", "정확" 키워드 기반 산출
 
-2. 구위 운세 (stuff_fortune) — 오늘의 체력운·활력운 (10점)
+2. 결행력 운세 (stuff_fortune) — 오늘의 체력운·활력운 (10점)
    - 별자리 활력운(4), 띠 체력운(3), 사주 오행 강도(3)
    - "에너지", "힘", "활력", "건강" 키워드 기반 산출
 
-3. 멘탈 운세 (composure_fortune) — 오늘의 정신운·인내운 (10점)
+3. 평정력 운세 (composure_fortune) — 오늘의 정신운·인내운 (10점)
    - 별자리 정신운(4), 띠 인내운(3), 사주 용신 작용(3)
    - "안정", "평화", "차분", "인내" 키워드 기반 산출
 
-4. 지배력 운세 (dominance_fortune) — 오늘의 승부운·권위운 (10점)
+4. 상승운 운세 (dominance_fortune) — 오늘의 승부운·권위운 (10점)
    - 별자리 승부운(4), 띠 권위운(3), 사주 관성(官星)(3)
    - "리더십", "주도", "승리", "지배" 키워드 기반 산출
 

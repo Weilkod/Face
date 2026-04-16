@@ -10,7 +10,7 @@ interface RadarChartProps {
   animated?: boolean;
 }
 
-const LABELS = ["제구력", "구위", "멘탈", "지배력", "운명력"];
+const LABELS = ["혜안력", "결행력", "평정력", "상승운", "운명력"];
 const CX = 170;
 const CY = 180;
 const MAX_R = 130;

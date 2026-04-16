@@ -14,7 +14,7 @@ Entertainment-only service that predicts KBO starting-pitcher matchups by mappin
 
 ## 2. Scoring invariants — get these wrong and the product breaks
 
-- Each of the 5 axes (제구력 / 구위 / 멘탈 / 지배력 / 운명력) is **20 pts = 관상 10 + 운세 10**. Total 100.
+- Each of the 5 axes (혜안력 / 결행력 / 평정력 / 상승운 / 운명력 — internal keys `command / stuff / composure / dominance / destiny` unchanged) is **20 pts = 관상 10 + 운세 10**. Total 100.
 - **관상 scores are SEASON-FIXED.** Compute once per `(pitcher_id, season)`, cache in `face_scores`, never regenerate unless the profile photo changes.
 - **운세 scores vary DAILY but are DETERMINISTIC per `(pitcher_id, game_date)`.** First call hits Claude, immediately write-through to `fortune_scores`, every subsequent call returns the cached row. Never re-call Claude for a key that already exists.
 - **상성 (chemistry) is RULE-BASED, no AI.** Only the 운명력 axis applies it. Base 2 pts + 띠 궁합 (삼합 +2, 육합 +1.5, 원진 −1.5, 충 −2) + 별자리 원소 궁합. **Clamp to [0, 4].**
@@ -38,7 +38,7 @@ Run them in parallel when the work is independent (e.g. crawler + fortune genera
 
 ### Frontend
 - Mobile-first. The Head-to-Head card and radar chart must render cleanly on a 360 px viewport — test there before declaring done.
-- Recharts radar is always 5 axes in this fixed order: 제구력 → 구위 → 멘탈 → 지배력 → 운명력. Don't reorder.
+- Recharts radar is always 5 axes in this fixed order: 혜안력 → 결행력 → 평정력 → 상승운 → 운명력 (keys `command → stuff → composure → dominance → destiny`). Don't reorder.
 - Score bars show `score / 20` filled. Highlight the winning side of each axis.
 - Korean copy in UI, but keep variable names, files, and comments in English.
 - Tailwind only — no styled-components, no CSS modules.

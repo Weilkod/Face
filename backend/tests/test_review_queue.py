@@ -502,3 +502,82 @@ class TestAdminResolveEndpoint:
             assert data[0]["crawled_name"] == "원정성"
         finally:
             admin_mod.REVIEW_QUEUE_PATH = original_path
+
+
+class TestResolveRequestXorValidator:
+    """ReviewQueueResolveRequest must accept exactly one of crawled_name | kbo_player_id."""
+
+    def test_both_set_rejected(self) -> None:
+        from pydantic import ValidationError
+
+        from app.schemas.response import ReviewQueueResolveRequest
+
+        with pytest.raises(ValidationError):
+            ReviewQueueResolveRequest(
+                team="LG",
+                game_date="2026-04-16",
+                crawled_name="원정성",
+                kbo_player_id=12345,
+            )
+
+    def test_neither_set_rejected(self) -> None:
+        from pydantic import ValidationError
+
+        from app.schemas.response import ReviewQueueResolveRequest
+
+        with pytest.raises(ValidationError):
+            ReviewQueueResolveRequest(team="LG", game_date="2026-04-16")
+
+    def test_only_name_accepted(self) -> None:
+        from app.schemas.response import ReviewQueueResolveRequest
+
+        req = ReviewQueueResolveRequest(
+            team="LG", game_date="2026-04-16", crawled_name="원정성"
+        )
+        assert req.crawled_name == "원정성"
+        assert req.kbo_player_id is None
+
+    def test_only_id_accepted(self) -> None:
+        from app.schemas.response import ReviewQueueResolveRequest
+
+        req = ReviewQueueResolveRequest(
+            team="LG", game_date="2026-04-16", kbo_player_id=12345
+        )
+        assert req.kbo_player_id == 12345
+        assert req.crawled_name is None
+
+
+class TestResolveReStampGuard:
+    """Re-resolving an already-resolved entry must NOT extend its 24 h TTL."""
+
+    @pytest.mark.asyncio
+    async def test_re_resolve_preserves_resolved_at(self, tmp_path: Path) -> None:
+        qfile = tmp_path / "queue.json"
+        original_ts = _iso_hours_ago(20)  # 20 h ago, still within TTL
+        queue = [
+            {
+                "team": "LG",
+                "game_date": "2026-04-16",
+                "crawled_name": "원정성",
+                "reason": "no name match",
+                "created_at": _iso_hours_ago(21),
+                "resolved": True,
+                "resolved_at": original_ts,
+            }
+        ]
+        with qfile.open("w", encoding="utf-8") as fh:
+            json.dump(queue, fh, ensure_ascii=False, indent=2)
+
+        from app.routers.admin import _resolve_review_queue_impl
+        from app.schemas.response import ReviewQueueResolveRequest
+
+        req = ReviewQueueResolveRequest(
+            team="LG", game_date="2026-04-16", crawled_name="원정성"
+        )
+        result = await _resolve_review_queue_impl(body=req, queue_path=qfile)
+
+        assert result.resolved is True
+        assert result.resolved_at == original_ts
+
+        saved = _read_queue(qfile)
+        assert saved[0]["resolved_at"] == original_ts

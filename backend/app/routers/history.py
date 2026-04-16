@@ -20,7 +20,7 @@ from app.db import get_session
 from app.models.daily_schedule import DailySchedule
 from app.models.matchup import Matchup
 from app.models.pitcher import Pitcher
-from app.routers._helpers import format_game_time, pitcher_summary
+from app.routers._helpers import format_game_time, pitcher_summary, resolve_winner_name
 from app.schemas.response import HistoryMatchup, HistoryResponse
 
 logger = logging.getLogger(__name__)
@@ -121,13 +121,13 @@ async def get_history(
                 away_pitcher=pitcher_summary(away),
                 home_total=m.home_total,
                 away_total=m.away_total,
-                predicted_winner=m.predicted_winner,
+                predicted_winner=resolve_winner_name(m.predicted_winner, home, away),
                 winner_comment=m.winner_comment,
                 chemistry_score=m.chemistry_score,
                 game_time=format_game_time(schedule.game_time if schedule else None),
                 series_label=None,
                 game_date=m.game_date,
-                actual_winner=m.actual_winner,
+                actual_winner=resolve_winner_name(m.actual_winner, home, away),
                 prediction_correct=prediction_correct,
             )
         )

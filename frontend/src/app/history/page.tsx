@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getHistory, getAccuracy } from "@/lib/api";
+import { getHistory, getAccuracy, isApiDownError } from "@/lib/api";
 import type { HistoryMatchup, AccuracyStats } from "@/types";
 import Footer from "@/components/Footer";
 import ScoreBar from "@/components/ScoreBar";
@@ -37,9 +37,8 @@ export default async function HistoryPage({ searchParams }: Props) {
       getAccuracy(),
     ]);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "데이터를 불러올 수 없습니다.";
-    error = msg;
-    isApiDown = msg.includes("fetch failed") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND");
+    error = e instanceof Error ? e.message : "데이터를 불러올 수 없습니다.";
+    isApiDown = isApiDownError(e);
   }
 
   const correctCount = matchups.filter((m) => m.prediction_correct).length;

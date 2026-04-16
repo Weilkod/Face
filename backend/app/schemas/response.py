@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -343,3 +343,13 @@ class ReviewQueueResolveRequest(BaseModel):
         None,
         description="KBO playerId — supply this OR crawled_name (when name is None)",
     )
+
+    @model_validator(mode="after")
+    def _check_xor_identifier(self) -> "ReviewQueueResolveRequest":
+        has_name = self.crawled_name is not None
+        has_id = self.kbo_player_id is not None
+        if has_name == has_id:
+            raise ValueError(
+                "Exactly one of crawled_name or kbo_player_id must be supplied"
+            )
+        return self

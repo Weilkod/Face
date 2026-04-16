@@ -47,6 +47,7 @@ import json
 import logging
 import re
 import unicodedata
+import threading
 import urllib.robotparser
 from datetime import date, datetime, time, timezone
 from pathlib import Path
@@ -76,6 +77,11 @@ RATE_LIMIT_S = 1.0  # seconds between requests to the same host
 FUZZY_THRESHOLD = 85  # rapidfuzz WRatio minimum for a fuzzy name match
 
 REVIEW_QUEUE_PATH = PROJECT_ROOT / "data" / "crawler_review_queue.json"
+
+# Serializes read-modify-write on the JSON queue. AsyncIOScheduler runs jobs
+# in the main event loop, but admin-triggered paths may hit threadpool
+# executors; the lock covers both cases.
+_REVIEW_QUEUE_LOCK = threading.Lock()
 
 # KBO endpoint — single call returns game + starter (ID + 한글 이름) per game.
 # Discovered 2026-04-13 session 3 by reading GameCenter Main.aspx JS refs. See
@@ -218,44 +224,45 @@ def _append_review(entry: dict, *, path: Optional[Path] = None) -> None:
     entry.setdefault("resolved", False)
     entry.setdefault("resolved_at", None)
 
-    queue: list[dict] = []
-    if target_path.exists():
-        try:
-            with target_path.open("r", encoding="utf-8") as fh:
-                queue = json.load(fh)
-        except Exception:
-            queue = []
+    with _REVIEW_QUEUE_LOCK:
+        queue: list[dict] = []
+        if target_path.exists():
+            try:
+                with target_path.open("r", encoding="utf-8") as fh:
+                    queue = json.load(fh)
+            except Exception:
+                queue = []
 
-    # TTL eviction before dedup check so that evicted slots do not block
-    # re-queueing the same pitcher on a new game date.
-    queue = _ttl_evict(queue)
+        # TTL eviction before dedup check so that evicted slots do not block
+        # re-queueing the same pitcher on a new game date.
+        queue = _ttl_evict(queue)
 
-    # Dedup: skip append if same key already present; update created_at instead.
-    new_key = _review_entry_key(entry)
-    for existing in queue:
-        if _review_entry_key(existing) == new_key:
-            existing["created_at"] = now_utc  # refresh timestamp on duplicate
-            logger.debug(
-                "[crawler] review dedup skip: team=%s crawled=%s date=%s",
-                entry.get("team"),
-                entry.get("crawled_name") or entry.get("kbo_player_id"),
-                entry.get("game_date") or entry.get("date"),
-            )
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            with target_path.open("w", encoding="utf-8") as fh:
-                json.dump(queue, fh, ensure_ascii=False, indent=2)
-            return
+        # Dedup: skip append if same key already present; update created_at instead.
+        new_key = _review_entry_key(entry)
+        for existing in queue:
+            if _review_entry_key(existing) == new_key:
+                existing["created_at"] = now_utc  # refresh timestamp on duplicate
+                logger.debug(
+                    "[crawler] review dedup skip: team=%s crawled=%s date=%s",
+                    entry.get("team"),
+                    entry.get("crawled_name") or entry.get("kbo_player_id"),
+                    entry.get("game_date") or entry.get("date"),
+                )
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                with target_path.open("w", encoding="utf-8") as fh:
+                    json.dump(queue, fh, ensure_ascii=False, indent=2)
+                return
 
-    queue.append(entry)
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    with target_path.open("w", encoding="utf-8") as fh:
-        json.dump(queue, fh, ensure_ascii=False, indent=2)
-    logger.warning(
-        "[crawler] review queued: team=%s crawled=%s reason=%s",
-        entry.get("team"),
-        entry.get("crawled_name") or entry.get("kbo_player_id"),
-        entry.get("reason"),
-    )
+        queue.append(entry)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with target_path.open("w", encoding="utf-8") as fh:
+            json.dump(queue, fh, ensure_ascii=False, indent=2)
+        logger.warning(
+            "[crawler] review queued: team=%s crawled=%s reason=%s",
+            entry.get("team"),
+            entry.get("crawled_name") or entry.get("kbo_player_id"),
+            entry.get("reason"),
+        )
 
 
 # ---------------------------------------------------------------------------

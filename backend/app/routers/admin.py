@@ -46,7 +46,11 @@ from app.schemas.response import (
     UpdateResultRequest,
     UpdateResultResponse,
 )
-from app.services.crawler import REVIEW_QUEUE_PATH, _review_entry_key
+from app.services.crawler import (
+    REVIEW_QUEUE_PATH,
+    _REVIEW_QUEUE_LOCK,
+    _review_entry_key,
+)
 from app.services.face_analyzer import get_or_create_face_scores
 from app.services.fortune_generator import get_or_create_fortune_scores
 
@@ -419,21 +423,27 @@ async def _resolve_review_queue_impl(
     Implementation separated from the route so tests can inject a custom path
     without exposing it as a route parameter.
     """
-    queue = _load_queue(queue_path)
-    target_key = _build_request_key(body)
+    with _REVIEW_QUEUE_LOCK:
+        queue = _load_queue(queue_path)
+        target_key = _build_request_key(body)
 
-    for idx, entry in enumerate(queue):
-        if _review_entry_key(entry) == target_key:
-            queue[idx]["resolved"] = True
-            queue[idx]["resolved_at"] = datetime.now(timezone.utc).isoformat()
-            _save_queue(queue_path, queue)
-            logger.info(
-                "[admin] resolved review entry: team=%s crawled_name=%s date=%s",
-                body.team,
-                body.crawled_name or body.kbo_player_id,
-                body.game_date,
-            )
-            return ReviewQueueItem.model_validate(queue[idx])
+        for idx, entry in enumerate(queue):
+            if _review_entry_key(entry) == target_key:
+                already_resolved = queue[idx].get("resolved", False)
+                queue[idx]["resolved"] = True
+                # Only stamp resolved_at on the first resolve; subsequent calls
+                # must not extend the 24 h TTL window.
+                if not already_resolved:
+                    queue[idx]["resolved_at"] = datetime.now(timezone.utc).isoformat()
+                _save_queue(queue_path, queue)
+                logger.info(
+                    "[admin] resolved review entry: team=%s crawled_name=%s date=%s re_resolve=%s",
+                    body.team,
+                    body.crawled_name or body.kbo_player_id,
+                    body.game_date,
+                    already_resolved,
+                )
+                return ReviewQueueItem.model_validate(queue[idx])
 
     raise HTTPException(
         status_code=404,

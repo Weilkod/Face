@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getPitcher } from "@/lib/api";
+import { getPitcher, isApiDownError } from "@/lib/api";
 import type { PitcherDetail } from "@/types";
 import RadarChart from "@/components/RadarChart";
 import Footer from "@/components/Footer";
@@ -27,9 +27,8 @@ export default async function PitcherPage({ params }: Props) {
   try {
     pitcher = await getPitcher(pitcherId);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "투수 정보를 불러올 수 없습니다.";
-    error = msg;
-    isApiDown = msg.includes("fetch failed") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND");
+    error = e instanceof Error ? e.message : "투수 정보를 불러올 수 없습니다.";
+    isApiDown = isApiDownError(e);
   }
 
   const face = pitcher?.face_scores ?? null;

@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_session
 from app.models.matchup import Matchup
 from app.models.pitcher import Pitcher
-from app.routers._helpers import pitcher_summary
+from app.routers._helpers import pitcher_summary, resolve_winner_name
 from app.schemas.response import MatchupSummary, TodayResponse
 
 router = APIRouter()
@@ -39,7 +39,7 @@ def _matchup_summary(matchup: Matchup, home: Pitcher, away: Pitcher) -> MatchupS
         away_pitcher=pitcher_summary(away),
         home_total=matchup.home_total,
         away_total=matchup.away_total,
-        predicted_winner=matchup.predicted_winner,
+        predicted_winner=resolve_winner_name(matchup.predicted_winner, home, away),
         winner_comment=matchup.winner_comment,
         chemistry_score=matchup.chemistry_score,
     )

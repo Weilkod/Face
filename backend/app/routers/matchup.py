@@ -21,7 +21,7 @@ from app.models.face_score import FaceScore
 from app.models.fortune_score import FortuneScore
 from app.models.matchup import Matchup
 from app.models.pitcher import Pitcher
-from app.routers._helpers import format_game_time, pitcher_summary
+from app.routers._helpers import format_game_time, pitcher_summary, resolve_winner_name
 from app.schemas.response import (
     AxisBreakdown,
     ChemistryDetail,
@@ -207,6 +207,6 @@ async def get_matchup_detail(
         away_total=matchup.away_total,
         chemistry=chemistry,
         chemistry_score=matchup.chemistry_score,
-        predicted_winner=matchup.predicted_winner,
+        predicted_winner=resolve_winner_name(matchup.predicted_winner, home_pitcher, away_pitcher),
         winner_comment=matchup.winner_comment,
     )

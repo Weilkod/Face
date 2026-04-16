@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { getTodayMatchups } from "@/lib/api";
+import { getTodayMatchups, isApiDownError } from "@/lib/api";
 import type { MatchupSummary } from "@/types";
 import MatchupCard from "@/components/MatchupCard";
 import Footer from "@/components/Footer";
@@ -23,9 +23,8 @@ export default async function TodayMatchupsPage() {
   try {
     matchups = await getTodayMatchups();
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "데이터를 불러올 수 없습니다.";
-    error = msg;
-    isApiDown = msg.includes("fetch failed") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND");
+    error = e instanceof Error ? e.message : "데이터를 불러올 수 없습니다.";
+    isApiDown = isApiDownError(e);
   }
 
   const today = formatDateKo(new Date().toISOString().split("T")[0]);

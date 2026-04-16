@@ -41,6 +41,17 @@ async function fetchJson<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// Classifies an error thrown by fetchJson as an API-is-down vs other error.
+// Network failures and HTTP 5xx count as "down" (ErrorBanner renders a
+// friendly outage message instead of leaking the raw error text).
+export function isApiDownError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return (
+    /fetch failed|ECONNREFUSED|ENOTFOUND/.test(msg) ||
+    /API error 5\d\d/.test(msg)
+  );
+}
+
 export async function getTodayMatchups(): Promise<MatchupSummary[]> {
   if (USE_MOCK) return MOCK_MATCHUPS;
   const response = await fetchJson<TodayResponse>("/api/today");

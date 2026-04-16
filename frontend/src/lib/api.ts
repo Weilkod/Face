@@ -25,9 +25,16 @@ const MOCK_GAME_DATE = "2026-04-14";
 const MOCK_ANALYZED_AT = "2026-04-14T00:00:00Z";
 
 async function fetchJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    next: { revalidate: 300 },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      next: { revalidate: 300 },
+    });
+  } catch (networkErr) {
+    // Surface a clean message for ECONNREFUSED / fetch failed scenarios
+    const detail = networkErr instanceof Error ? networkErr.message : String(networkErr);
+    throw new Error(`fetch failed: ${detail}`);
+  }
   if (!res.ok) {
     throw new Error(`API error ${res.status}: ${path}`);
   }

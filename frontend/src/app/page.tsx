@@ -4,6 +4,7 @@ import { getTodayMatchups } from "@/lib/api";
 import type { MatchupSummary } from "@/types";
 import MatchupCard from "@/components/MatchupCard";
 import Footer from "@/components/Footer";
+import ErrorBanner from "@/components/ErrorBanner";
 
 function formatDateKo(dateStr: string): string {
   const d = new Date(dateStr);
@@ -17,11 +18,14 @@ function formatDateKo(dateStr: string): string {
 export default async function TodayMatchupsPage() {
   let matchups: MatchupSummary[] = [];
   let error: string | null = null;
+  let isApiDown = false;
 
   try {
     matchups = await getTodayMatchups();
   } catch (e) {
-    error = e instanceof Error ? e.message : "데이터를 불러올 수 없습니다.";
+    const msg = e instanceof Error ? e.message : "데이터를 불러올 수 없습니다.";
+    error = msg;
+    isApiDown = msg.includes("fetch failed") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND");
   }
 
   const today = formatDateKo(new Date().toISOString().split("T")[0]);
@@ -80,14 +84,24 @@ export default async function TodayMatchupsPage() {
           </div>
 
           {error ? (
-            <div className="rounded-2xl bg-white p-8 text-center card-soft ring-1 ring-black/5">
-              <p className="text-ink-muted">{error}</p>
-            </div>
+            <ErrorBanner message={error} isApiDown={isApiDown} />
           ) : matchups.length === 0 ? (
             <div className="rounded-2xl bg-white p-8 text-center card-soft ring-1 ring-black/5">
-              <p className="text-ink-muted">
+              <p className="text-3xl mb-4">⚾</p>
+              <p className="text-base font-semibold text-ink mb-2">
                 오늘 예정된 매치업이 없습니다.
               </p>
+              <p className="text-sm text-ink-muted mb-6">
+                경기가 없는 날이거나 선발투수 발표 전일 수 있습니다.
+                <br />
+                선발투수는 보통 당일 오전 10~11시에 발표됩니다.
+              </p>
+              <Link
+                href="/history"
+                className="inline-flex items-center gap-2 rounded-full bg-coral-light px-6 py-2.5 text-sm font-semibold text-coral transition hover:bg-coral/15 min-h-[44px]"
+              >
+                과거 매치업 보기
+              </Link>
             </div>
           ) : (
             <div className="grid gap-6">

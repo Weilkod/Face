@@ -132,6 +132,13 @@ main=`14c7e20`. 세션 10 에서 PR #7/#8/#9/#10/#11 연속 처리. **배포 이
   · **I3 APScheduler 싱글톤** — `backend/app/main.py:17-18` lifespan 이 무조건 scheduler 기동. Railway/Fly 에서 replicas ≥ 2 이면 크롤/분석/퍼블리시 잡이 두 번 실행되어 `fortune_scores` 중복 write + Claude 토큰 2배 소모. 실 배포(세션 10) 전 `SCHEDULER_ENABLED` 플래그 또는 "scheduler 전용 워커 프로세스" 분리 필요.
   · **N1 compose 버전 요구사항** — `env_file.path/required` long-form 은 Compose v2.24+ (Jan 2024). 구버전은 파싱 실패.
 
+세션 11 산출물 (2026-04-16, 진행 중):
+- **I3 APScheduler 싱글톤 가드 완료** — Phase 6 실 배포 blocker 해소. `Settings.scheduler_enabled: bool = Field(default=True)` 추가 (`backend/app/config.py:31`). `main.py` lifespan 이 플래그 off 면 `build_scheduler()` 자체를 호출하지 않고 `app.state.scheduler = None` + WARNING 로그. 플래그 on 이면 scheduler instance 를 `app.state.scheduler` 에 저장해 shutdown 훅도 state 에서 조회하도록 변경 (start() 실패 시 `getattr(..., None)` 이 None → shutdown 스킵 방어). `backend/.env.example` 에 설명 + 기본값 `true` 문서화.
+  · 배포 운영: Railway/Fly replicas ≥ 2 시 한 워커 또는 전용 scheduler deployment 만 `SCHEDULER_ENABLED=true`, 나머지는 `false` 로 주입. 로컬 dev/docker-compose 는 단일 워커라 default 로 충분.
+  · 테스트 `backend/tests/test_scheduler_flag.py` 3건 (default enabled / disabled skips build / explicit true) — `TestClient` 컨텍스트로 ASGI lifespan 트리거, `build_scheduler` 모킹해 APScheduler 내부 동작은 우회.
+  · `pytest backend/tests -v` → **15 passed** (기존 12 + 신규 3), 회귀 0.
+  · 대안(전용 scheduler 워커 프로세스 분리) 은 이 플래그 위에서 그대로 작동하므로 마이그레이션 경로 보존.
+
 ---
 
 ## [WPI] 세션 11 인계 (2026-04-14)

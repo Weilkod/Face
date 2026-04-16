@@ -14,14 +14,25 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    scheduler = build_scheduler()
-    scheduler.start()
-    logger.info("[main] APScheduler started with %d job(s)", len(scheduler.get_jobs()))
+    settings = get_settings()
+    if settings.scheduler_enabled:
+        scheduler = build_scheduler()
+        scheduler.start()
+        app.state.scheduler = scheduler
+        logger.info("[main] APScheduler started with %d job(s)", len(scheduler.get_jobs()))
+    else:
+        # Multi-replica deploy path: only one worker (or a dedicated scheduler
+        # process) sets SCHEDULER_ENABLED=true so crawl/analyze/publish jobs
+        # don't double-fire. WARNING so misconfigured prod shows up in logs.
+        app.state.scheduler = None
+        logger.warning("[main] SCHEDULER_ENABLED=false — APScheduler not started")
     try:
         yield
     finally:
-        scheduler.shutdown(wait=False)
-        logger.info("[main] APScheduler stopped")
+        scheduler = getattr(app.state, "scheduler", None)
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
+            logger.info("[main] APScheduler stopped")
 
 
 def create_app() -> FastAPI:

@@ -721,3 +721,75 @@ Nit: `ErrorBanner` 에서 raw error message(`fetch failed: Failed to fetch`) 가
 1. `git pull origin main` → PROGRESS.md 이 섹션 확인.
 2. 단일 메시지에 **두 Agent 를 병렬 호출** (react-ui-dev + fastapi-backend-dev). 각각 위 Prompt 본문을 통째로 전달.
 3. 두 트랙 완료 후 Wave 3 (Track G E2E + Track H code-review) 프롬프트를 별도로 준비.
+
+---
+
+### Wave 2 Track F 실행 결과 (2026-04-16, v2 재작업)
+
+> **주의**: 최초 Track F 브랜치 (`claude/wave2-track-f-review-queue-fastapi-backend-dev`, PR #22) 는 agent worktree 가 stale base (`9281df3`, 세션 3) 에서 생성됐음이 PR 오픈 후 발견돼 DIRTY 머지 불가 판정. 해당 브랜치가 그대로 머지되면 Phase 4 admin 라우터 5개 + Track A BE 스키마 전체를 덮어써서 삭제됨. PR #22 는 close 후 main 기준 `claude/wave2-track-f-review-queue-v2` 브랜치에서 add-only 전략으로 재작업 (본 PR).
+
+#### 저장소 결정: JSON 파일 유지
+
+DB 테이블 신설 없이 기존 `data/crawler_review_queue.json` 파일 유지.
+근거:
+- 읽기/쓰기 빈도 극저 (크롤러 실패 시만 append, 관리자 조회 시만 read)
+- Alembic 마이그레이션 불필요 → 운영 복잡도 최소화
+- 동시성 위험 있으나 08:00 crawl_job 이 단일 프로세스 내 순차 실행 — 현재 트래픽 수준에서 허용 가능
+
+#### Dedup 키 정의
+
+```
+(team, crawled_name, game_date, kbo_player_id)
+```
+
+- `crawled_name` 이 None 이 아닐 때: `kbo_player_id` 는 None (key에서 제외)
+- `crawled_name` 이 None 일 때: `kbo_player_id` 포함 (동명이인 없는 ID 구분)
+- 중복 감지 시: 새 row 추가 금지, 기존 row 의 `created_at` 만 갱신 (lazy refresh)
+
+#### TTL 정책
+
+- **대상:** `resolved=True` + `resolved_at` 이 24시간 이전인 엔트리
+- **발동:** `_append_review()` 호출 시 (lazy eviction) — 읽기 경로에서는 미발동
+- **비대상:** `resolved=False` 엔트리는 운영자 개입이 필요하므로 절대 삭제 금지
+
+#### 스키마 확장 (기존 호출자 호환)
+
+`_append_review(entry, *, path=None)` 내부에서 기본값 stamp:
+- `created_at`: ISO8601 UTC (최초 진입 시)
+- `resolved`: False
+- `resolved_at`: None
+
+기존 caller (`match_pitcher_name`) 에서 `queued_at` 필드 제거, `date` → `game_date` 키 이름 통일.
+
+#### 엔드포인트 사양
+
+| 메서드 | 경로 | 쿼리/바디 | 응답 |
+|--------|------|-----------|------|
+| GET | `/admin/review-queue` | `?unresolved_only=bool&limit=int` | `list[ReviewQueueItem]` |
+| POST | `/admin/review-queue/resolve` | `ReviewQueueResolveRequest` (JSON body) | `ReviewQueueItem` (200) or 404 |
+
+인증: 없음 — 기존 admin 라우터 컨벤션 동일 (네트워크/프록시 레이어 위임).
+
+#### 테스트 커버리지 (22 건)
+
+- `TestAppendReview`: happy / schema stamp / dedup / dedup refresh / 다른 game_date 분리 / kbo_player_id 키 / TTL 오래된 resolved 제거 / TTL 최근 resolved 유지 / TTL unresolved 절대 유지 (9건)
+- `TestReviewEntryKey`: primary key / kbo_player_id 포함 조건 / 이름 있을 때 id 무시 (3건)
+- `TestTtlEvict`: 오래된 resolved 제거 / 최근 resolved 유지 / unresolved 유지 (3건)
+- `TestAdminGetReviewQueue`: unresolved_only 필터 / 전체 / limit cap (3건)
+- `TestAdminResolveEndpoint`: 성공 / 404 / kbo_player_id 경로 / ASGI 통합 smoke (4건)
+
+fixtures 은 `tmp_path` 로 격리, 실 `data/crawler_review_queue.json` 무오염.
+
+#### 변경 파일 (main 기준 add-only)
+
+- `.gitignore` — `data/crawler_review_queue.json` 추가
+- `backend/app/services/crawler.py` — `_review_entry_key`, `_ttl_evict` 추가 + `_append_review` dedup/TTL/path-override 확장 + caller 엔트리에서 `queued_at` 제거 + `date` → `game_date` 통일
+- `backend/app/schemas/response.py` — `ReviewQueueItem`, `ReviewQueueResolveRequest` 신설 (기존 Track A 스키마 유지)
+- `backend/app/routers/admin.py` — `/admin/review-queue` GET + `/admin/review-queue/resolve` POST 추가 (기존 Phase 4 admin 라우트 5개 유지)
+- `backend/tests/test_review_queue.py` — 22 테스트 신설
+
+#### 미구현 (의도적 미포함)
+
+- `_append_review` 동시성 안전 (fcntl lock / DB 승격) — 08:00 cron 단일 프로세스 내 순차라 현재 수용 가능. Postgres 전환 시 재검토
+- Alembic 마이그레이션 — JSON 유지 결정으로 불필요
+- 생산 환경 인증 (auth guard) — 프록시/네트워크 레이어 위임, 기존 admin 컨벤션 유지

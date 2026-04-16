@@ -51,6 +51,9 @@ data/pitcher_images/*.jpeg
 data/pitcher_images/*.png
 data/pitcher_images/*.webp
 
+# Runtime data files — generated at runtime, must not be committed
+data/crawler_review_queue.json
+
 # Claude Code local
 .claude/settings.local.json
 .claude/.last-reviewed-hash

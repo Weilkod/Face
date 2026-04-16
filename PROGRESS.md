@@ -55,22 +55,13 @@ Wave 내 Track 병렬, Wave 간 의존. Critical Path: Track A → Track E → T
 - [x] **Wave 2 Track E** FE 실 데이터 연동 (USE_MOCK=false, ErrorBanner, Empty state) — PR #21
 - [x] **Wave 2 Track F** review queue dedup/TTL + admin endpoints + 22 테스트 (PR #24 v2)
 - [x] **Wave 3 Track H** Wave 1–2 전체 code review + Critical 3 / Important 4 fix (`9a55715`, `02d5b10`). predicted_winner enum→name at response boundary, XOR validator on ReviewQueueResolveRequest, `threading.Lock` on review-queue I/O, re-resolve TTL guard, 5xx→isApiDown, ErrorBanner no-leak, sample script sqlite guard + KST. 141 → 151 tests.
+- [x] **Wave 3 Track G** E2E pipeline smoke (2026-04-16). DB clean-rebuild → `seed_pitchers.py` → `create_sample_matchup.py` → uvicorn + `npm run dev`. `/api/today`, `/api/matchup/1`, `/api/history`, `/` home page, `/history`, `/pitcher/1`, OG route `/api/og/matchup/1` 모두 정상. **`predicted_winner` boundary resolve 실검증**: DB `"away"` → response `"곽빈"/"양현종"`. FE HTML 에 enum 유출 0건 (`⭐ <!-- -->곽빈<!-- --> 승` 렌더). 5축 순서 + disclaimer 유지. WAF 로 실 크롤 불가 → 샘플 스크립트 경로로 완료.
 
 ---
 
 ## 진행 중 TODO
 
-### Phase 7 Wave 3 — Validation (Wave 2 완료 후, 병렬 2 Track)
-
-- [ ] **Wave 3 Track G — E2E Pipeline Test**
-  1. Clean DB (`init_db.py`) → `seed_pitchers.py --harvest` → `crawl_today.py` → `/admin/generate-fortune` → `/admin/calculate-matchups` → `publish_matchups()`
-  2. `GET /api/today` → 실 매치업 데이터 반환 확인
-  3. `GET /api/matchup/{id}` → 5축 점수 + 상성 + 승자 판정 확인
-  4. 프론트엔드에서 해당 데이터 렌더 확인
-  - **주의**: Wave 1 Track C 가 WAF IP-allowlist 로 FAIL 상태이므로 실 크롤 경로는 VPS/한국 IP 환경에서 수행하거나, `scripts/create_sample_matchup.py` 로 합성 매치업 사용.
-
-
-### Phase 7 Wave 4 — Deploy (Wave 3 완료 후)
+### Phase 7 Wave 4 — Deploy (Wave 3 완료)
 
 - [ ] **Track I-1 Docker Compose 로컬 smoke** (docker CLI 필요)
   - `docker compose up --build` → `http://localhost:3000` FE, `:8000/api/today` BE 확인
@@ -93,6 +84,8 @@ Wave 내 Track 병렬, Wave 간 의존. Critical Path: Track A → Track E → T
 ### 후속 과제 (non-blocker)
 
 - [ ] **Track I-2 prep: `/admin/*` 인증 gate**: 현재 dev-only로 열려 있음. Railway 배포 시 `Depends(require_admin_token)` + `APP_ENV==prod` 조건부 적용 필요. Wave 3 Track H 에서 Important 로 플래그됨.
+- [ ] **I-G1 `create_sample_matchup.py` chemistry placement**: 프로덕션 `scoring_engine._build_axis_totals` 는 chem 을 destiny axis total 에 베이크하지만 샘플 스크립트는 `home_total` 에만 더함 (각 axis.total 엔 0 만큼만 영향). grand total 합은 일치하지만 destiny.total 이 chem_final 만큼 낮게 나와 radar chart / score bar 가 프로덕션과 미묘히 다름. Wave 3 Track G 실검증 중 발견. P-1 계열 sample-vs-prod 불일치.
+- [ ] **I-G2 DATABASE_URL 상대경로 취약성**: `sqlite+aiosqlite:///./data/facemetrics.db` 가 cwd 의존. `cd backend && uvicorn` 으로 기동하면 `backend/data/` 에 빈 DB 자동 생성되고 API 가 empty matchups 반환. **반드시 프로젝트 루트에서 `PYTHONPATH=backend python -m uvicorn app.main:app` 형태로 기동**. Track I-1 Dockerfile 에서 WORKDIR 가 루트로 고정되는지 확인 + README 기동 가이드 업데이트 필요.
 - [ ] **Wave 1 Track C 언블록**:
   - 옵션 1: 한국/미국 residential/VPS IP 에서 재실행
   - 옵션 2: Playwright headless fallback (`_fetch_kbo_playwright()` 별도 모듈)

@@ -48,6 +48,7 @@ Run them in parallel when the work is independent (e.g. crawler + fortune genera
 - Pydantic v2 schemas in `app/schemas/`, SQLAlchemy models in `app/models/`. Don't return ORM objects from routes.
 - APScheduler jobs live in `app/scheduler.py` and fire at **08:00 / 10:30 / 11:00 KST**. Never hardcode UTC.
 - Config via `pydantic-settings` reading `.env`. `ANTHROPIC_API_KEY` never in code, never in git.
+- **`SCHEDULER_ENABLED` must be true on exactly ONE host across the entire deployment.** Current split (Wave 5, PROGRESS.md): Oracle Cloud Seoul worker VM = `true` (needs 한국 IP for KBO `/ws/*` crawl), Railway API server = `false`. Flipping both to `true` causes APScheduler to fire the same job on two hosts in parallel → duplicate crawls, race conditions on `upsert_schedule`, and double Claude API spend. In-process singleton guard (session 11, PR #12) only protects within one host, not across. When adding a new worker / replica, explicitly zero out this flag on all others before switching.
 
 ### Claude API calls
 - Use model `claude-opus-4-6` for quality-critical runs (관상), `claude-sonnet-4-6` for volume (daily 운세). Enable **prompt caching** on the system prompt — it doesn't change between pitchers.

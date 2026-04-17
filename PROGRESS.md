@@ -99,6 +99,60 @@ Wave 내 Track 병렬, Wave 간 의존. Critical Path: Track A → Track E → T
 
 - [x] **Track I-3 Vercel FE 배포** (2026-04-16). `weilkods-projects/frontend` 프로젝트 신규 생성. 환경변수 `NEXT_PUBLIC_API_URL=https://face-production-0f00.up.railway.app`, `NEXT_PUBLIC_USE_MOCK=false` production 타깃에 추가 후 `vercel deploy --prod`. **Vercel Authentication (Standard Protection) 기본 ON → 401 반환, 대시보드 Deployment Protection 에서 Disabled 로 수동 토글 필요**. Production URL: `https://frontend-weilkods-projects.vercel.app`. `/`, `/history`, `/api/og/matchup/1` (edge runtime, `image/png`) 전부 200. SSR 이 `NEXT_PUBLIC_API_URL` 로 Railway BE 직접 페치 (INTERNAL_API_URL 미설정 → public fallthrough 경로), empty-state 렌더 확인 ("경기가 없는 날이거나 선발투수 발표 전일 수 있습니다"), enum-leak 0.
 
+### Phase 7 Wave 5 — Oracle Cloud Seoul 이전 (플랜, 미착수)
+
+**배경.** Railway BE 는 US 리전이라 KBO `/ws/*` 가 WAF 로 블록됨 (Wave 1 Track C FAIL). 매일 새 선발투수 자동 크롤 + 운세 재생성 파이프라인을 자동화하려면 **한국 IP 엔드포인트가 구조적으로 필요**. Oracle Cloud Always Free 의 **Ampere A1 ARM (4 OCPU / 24GB RAM) Seoul 리전** 1 인스턴스로 BE 를 이전해 이 제약을 해소한다.
+
+**채택 토폴로지 (Pattern 3 — 풀 이전, Supabase 유지).**
+- Oracle Seoul VM = **BE 서버 + 스케줄러** (FastAPI + APScheduler 상시 구동, `SCHEDULER_ENABLED=true`).
+- Supabase Postgres Session Pooler = 기존 그대로 (관리형 DB 유지, 한국 IP 무관).
+- Vercel FE = 기존 그대로, `NEXT_PUBLIC_API_URL` / `INTERNAL_API_URL` 만 신규 Oracle 도메인으로 교체.
+- Railway BE = 이전 검증 끝난 뒤 정지 (서비스 삭제는 DNS 컷오버 72h 이후, 롤백 위해 1주 유지).
+- Claude API 호출 경로는 Oracle → Anthropic (US) 로 outbound. 레이턴시 다소 증가하나 배치 파이프라인이라 무영향.
+
+**대안.** Pattern 2 (split) — Railway 유지 + Oracle 에 scheduler-only 워커. 둘 다 Supabase 공유. 운영 단순성 이유로 Pattern 3 을 기본 채택하되 Oracle 자원 불안정(ARM 품절/재부팅) 시 Pattern 2 로 회귀.
+
+**선결 조건.**
+1. Oracle Cloud 계정 + Seoul 홈리전 지정. ARM Ampere A1 은 테넌시 단위 쿼터 (Always Free: 4 OCPU + 24GB 까지 무제한 무료, 단 **리전별 capacity 부족 빈번** — `Out of host capacity` 리트라이 자동화 스크립트 필요).
+2. 도메인. 옵션: (a) 보유 도메인 Cloudflare DNS + Caddy auto-TLS, (b) `DuckDNS` 무료 서브도메인 + Caddy. (a) 권장 — Cloudflare 프리 티어가 CDN + DDoS + TLS 종단까지 해결.
+3. Supabase session pooler URL + `ANTHROPIC_API_KEY` 기존 값 그대로 사용 (Railway Variables 에서 복사).
+
+**Track J 실행 순서.**
+
+- [ ] **J-1 VM 프로비저닝** — Oracle Cloud Console → Compute → Instance 생성. Shape `VM.Standard.A1.Flex` / OCPU 4 / RAM 24GB / OS Canonical Ubuntu 22.04 ARM. Boot Volume 200GB (Always Free 한도). SSH 키 페어 생성 + 개인키 로컬 저장. **ARM capacity 부족 시 `oci-capacity-retry.sh` 루프** (15분 간격 재시도, 평균 대기 수 시간 ~ 1일).
+- [ ] **J-2 네트워킹** — VCN Security List ingress rule: 0.0.0.0/0 tcp 22 (관리 IP 로 좁힐 것), 80, 443. **Oracle Ubuntu 이미지는 기본 iptables DROP 정책 — `sudo iptables -I INPUT -p tcp --dport 443 -j ACCEPT` + `netfilter-persistent save`** 필수. 빠뜨리면 보안리스트 열어도 연결 안 됨.
+- [ ] **J-3 DNS** — Cloudflare (또는 도메인 등록기관) 에 A record `api.<domain>` → VM public IP. Proxy ON 권장 (실 IP 숨김 + DDoS 보호). TTL 300.
+- [ ] **J-4 시스템 부트스트랩** — ssh 접속 후: `apt update && apt install -y docker.io docker-compose-v2 git ufw fail2ban`, `usermod -aG docker ubuntu`, `ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp && ufw enable`, `fail2ban-client status sshd` 확인.
+- [ ] **J-5 레포 clone + .env** — `git clone https://github.com/Weilkod/Face.git /opt/facemetrics`. `/opt/facemetrics/backend/.env` 에 `ANTHROPIC_API_KEY=<key>`, `DATABASE_URL=postgresql+asyncpg://postgres.czhnskoroaxuvczyngrr:<pw>@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres`, `APP_ENV=prod`, `SCHEDULER_ENABLED=true`, `SCHEDULER_TIMEZONE=Asia/Seoul`, `FRONTEND_ORIGIN=https://frontend-weilkods-projects.vercel.app`. **`.env` 권한 600, root 소유**.
+- [ ] **J-6 BE 단독 기동 (FE 불필요, Vercel 유지)** — `docker-compose.yml` 의 frontend 서비스 주석 처리 또는 `docker compose up -d backend` 만 실행. Container listen 0.0.0.0:8000. `docker logs -f facemetrics-backend` 로 alembic 마이그레이션 + uvicorn boot 확인.
+- [ ] **J-7 Caddy 리버스 프록시 + 자동 TLS** — 호스트 레벨에 Caddy 설치 (`apt install caddy`), `/etc/caddy/Caddyfile`:
+  ```
+  api.<domain> {
+      reverse_proxy localhost:8000
+      encode gzip
+  }
+  ```
+  `systemctl reload caddy`. Let's Encrypt 인증서 자동 발급 + 갱신. Cloudflare proxy ON 시엔 **origin cert** 또는 Cloudflare Origin CA 사용 (Full Strict 모드).
+- [ ] **J-8 BE 실검증** — `curl https://api.<domain>/health`, `/api/today`, `/docs` 200 확인. Claude 호출 실검증: `POST /admin/analyze-face/1` → `face_scores` 테이블 overall_impression 에 실 텍스트 들어오는지 Supabase SQL Editor 로 확인. `/ws/*` 크롤 실검증: `POST /admin/crawl-schedule?date=<today>` → 200 + `daily_schedules` insert. **Wave 1 Track C 언블록 판정 여기서 결정**.
+- [ ] **J-9 스케줄러 실제 fire 검증** — VM 시스템 시간 `timedatectl set-timezone Asia/Seoul`. 08:00 KST 크롤 잡이 실제로 발화하는지 익일 로그 확인 (`docker logs facemetrics-backend | grep crawl_schedule`). 첫 fire 실패 시 `crawler_review_queue.json` + 에러 로그 분석.
+- [ ] **J-10 FE 컷오버** — Vercel Dashboard → `weilkods-projects/frontend` → Settings → Environment Variables → `NEXT_PUBLIC_API_URL=https://api.<domain>` (+ `INTERNAL_API_URL` 동일값) 으로 교체 → production redeploy. Railway BE (`face-production-0f00.up.railway.app`) 는 1주 유지 후 종료. Vercel `FRONTEND_ORIGIN` 은 그대로, Oracle `.env` 의 `FRONTEND_ORIGIN` 이 Vercel 도메인 가리키면 CORS OK.
+- [ ] **J-11 관측/알림** — UptimeRobot 무료 플랜 → `https://api.<domain>/health` 5분 간격 ping, 실패 시 이메일. Supabase 대시보드에서 DB connection / row growth 수동 스팟체크. 로그 수집은 초기엔 `docker logs` 만 (journal 로 롤링).
+- [ ] **J-12 초기 시드** — J-8 Claude 호출 검증 끝나면 `seed_pitchers.py --harvest` (이제 VM 에서 한국 IP 로 KBO 직접 긁음) → `/admin/generate-fortune?date=<today>` → `/admin/calculate-matchups?date=<today>`. 기존 Supabase 의 폴백 매치업/점수는 선행 `DELETE` 로 정리.
+
+**리스크 / 주의.**
+- Oracle Always Free 는 **90일 비활성 시 리소스 회수** 정책 있음 (idle VM 자동 stop 아님, 계정 로그인 장기간 없으면 전체 중단). 매월 1회 콘솔 로그인 필요.
+- ARM 이미지에서 `playwright install chromium` 시 `ARM64` 바이너리 지원 필요. 향후 Playwright fallback 도입 시 검증 항목.
+- Supabase 세션 풀러 연결 레이턴시: Seoul ↔ Singapore (`ap-southeast-1`) 약 70-90ms RTT. 한 요청당 쿼리 수가 늘면 체감 영향. 필요 시 Supabase Seoul 리전 migration 검토 (현재 무료 플랜은 리전 변경 불가 — 유료 이관 필요).
+- Cloudflare proxy 통과 시 `cf-connecting-ip` 헤더를 `X-Forwarded-For` 신뢰 목록에 포함시켜야 rate-limit 룰이 정확. 현 코드는 IP-based rate limit 없으므로 보류 가능.
+- Oracle VM 단일 노드 = SPOF. Wave 5 단계에선 감수, Wave 6+ 에서 Oracle 의 다른 Always Free VM (x86 1/8 OCPU) 을 hot standby 로 배치 검토.
+
+**롤백 트리거.**
+- J-1 ARM capacity 1주 이상 확보 실패 → Pattern 2 (Railway 유지 + Oracle scheduler-only) 로 스코프 축소.
+- J-8 에서 `/ws/*` 가 Oracle Seoul IP 에서도 블록 (대역 기반 차단) → Playwright fallback 착수 (Wave 1 Track C 후속옵션 2).
+- J-9 스케줄러 fire 실패 연속 3일 → 원인 수정 불가 시 Railway 복귀.
+
+**완료 기준.** (1) `api.<domain>` HTTPS 로 `/api/today`, `/api/matchup/{id}` 등 기존 엔드포인트 동작, (2) Supabase 에 실 Claude 분석 결과 기록 (overall_impression 자연어), (3) 08:00 KST 크롤 잡이 1회 이상 자동 발화해 `daily_schedules` 갱신, (4) Vercel FE 가 신규 도메인으로 페치 성공, (5) Railway BE off.
+
 ### 후속 과제 (non-blocker)
 
 - [ ] **프로덕션 DB 시딩**: Supabase Postgres 는 alembic 스키마만 있고 pitchers/matchups 데이터 없음. `/api/today` 가 `{matchups:[]}` 라 FE 는 empty-state 렌더. 시드 방안: (1) 로컬에서 `DATABASE_URL=<session-pooler-url> python scripts/seed_pitchers.py --harvest` 로 선수 프로필 수확 후 (2) `scripts/create_sample_matchup.py` 로 샘플 matchup 생성, 또는 (3) 워커 서비스 띄워 스케줄러 돌리기 — 단, Railway 미국 리전은 KBO 크롤이 한국 IP WAF 에 블록됨 (Wave 1 Track C FAIL 참조).

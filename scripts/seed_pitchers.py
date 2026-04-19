@@ -244,7 +244,7 @@ async def main(args: argparse.Namespace) -> int:
     print(
         f"[seed_pitchers] season={season} inserted={inserted} updated={updated}"
     )
-    print(f"[seed_pitchers] db url: {engine.url}")
+    print(f"[seed_pitchers] db url: {engine.url.render_as_string(hide_password=True)}")
     print(f"[seed_pitchers] photos wired from manifest: {len(photo_map)}")
     if harvest_counts is not None:
         print(

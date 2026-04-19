@@ -8,36 +8,40 @@
 - **Spec:** `README.md` + `CLAUDE.md`
 - **DB URL (dev):** `sqlite+aiosqlite:///data/facemetrics.db`
 - **Stop hook:** `.claude/hooks/code-reviewer-gate.sh` — 코드 변경 시 자동 code-reviewer 호출
-- **main:** `c3f380d` (2026-04-16 기준, Wave 3 완료 + Wave 4 Track I-1/I-2/I-3/I-4 전부 PASS — 프로덕션 런치 완료)
+- **main:** `c3f380d` (2026-04-16 기준, Wave 3 완료 + Wave 4 Track I-1/I-2/I-3/I-4 전부 PASS — 프로덕션 런치 완료). Track I-5 (2026-04-19) 는 브랜치 `claude/review-progress-plan-E6hN5` tip `ae8cc60` 에 보류 — 로컬 실행 대기.
 - **Prod URLs:** BE `https://face-production-0f00.up.railway.app` (Railway + Supabase Postgres session pooler), FE `https://frontend-weilkods-projects.vercel.app` (Vercel).
 - **⚠️ 새 세션 시작 시:** 첫 턴에 반드시 `git fetch origin main && git log --oneline HEAD..origin/main` 실행. 다른 병렬 세션이 머지한 커밋이 있으면 `git pull --ff-only` 로 최신화 후 착수 — 과거에 중복 작업으로 PR 이 obsolete 된 선례 있음 (ARCHIVE.md §세션 11 참조).
 
 ---
 
-## 🔥 다음 세션 우선 순위 — 프로덕션 DB 시딩
+## 🔥 다음 세션 우선 순위 — 프로덕션 DB 시딩 (사용자 deferred, 나중에 로컬 실행)
 
-프로덕션 배포는 완료됐지만 Supabase Postgres 가 비어있어 FE 가 empty-state 만 렌더함. 실 matchup 이 보이도록 시드 필요.
+프로덕션 배포는 완료됐지만 Supabase Postgres 가 비어있어 FE 가 empty-state 만 렌더함. **Track I-5 (2026-04-19)** 로 수동 5-step 을 한 번에 돌리는 래퍼 `scripts/seed_production.py` 를 올려뒀으니 로컬 한국 IP 머신에서 한 번만 실행하면 됨.
 
-**선결 조건:** Supabase session pooler URL 확보 (Railway `DATABASE_URL` 과 동일한 값). Supabase 대시보드 → Project Settings → Database → Session pooler.
+> **상태 (2026-04-19):** 래퍼 + 런북 + 코드리뷰 2라운드 완료, 브랜치 `claude/review-progress-plan-E6hN5` tip `c6afccf` 에 푸시됨. 사용자가 2026-04-19 세션에서 "지금 바쁘고 머리 아프다 → 나중에" 로 **의식적으로 실행 연기**. 블로커 없음, 대기 시간 제약 없음. 다음 세션/시간 여유 생길 때 아래 명령 1회 실행하면 끝.
 
-**순서 (로컬에서 Supabase 에 직접 write):**
-1. 프로젝트 루트에서 임시 env 로 시드 실행 — `.env` 건드리지 말고 명령줄 override 사용
-2. **선수 프로필 수확** (KBO 홈페이지에서 출생정보/혈액형 긁어오기, 한국 IP 필수):
-   ```bash
-   DATABASE_URL="postgresql+asyncpg://postgres.czhnskoroaxuvczyngrr:...@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres" \
-     python scripts/seed_pitchers.py --harvest
-   ```
-   → `pitchers` 테이블에 10명 upsert, 멱등. A-6 로직 (세션 12, PR #13) 기준 10/10 hit.
-3. **관상/운세 스코어 생성** (Claude Vision + Text 실호출, ~$1 예상): `/admin/trigger-analyze` POST 또는 로컬에서 `scripts/analyze_all_pitchers.py` 계열 (없으면 즉석 작성).
-4. **샘플 matchup 생성** — `scripts/create_sample_matchup.py` (단, I-G1 chemistry placement 버그 있음, destiny.total 만 살짝 낮음. 프로덕션 `publish_matchups` 경로가 정석).
-5. FE `https://frontend-weilkods-projects.vercel.app` 접속해 실 매치업 카드 렌더 확인. SSR `revalidate: 300` 이라 최대 5분 캐시 — 필요시 Vercel redeploy 로 즉시 무효화.
+**실행 (로컬):**
+```bash
+git checkout claude/review-progress-plan-E6hN5 && git pull
+pip install -r backend/requirements.txt   # 최초 1회
+
+export DATABASE_URL='postgresql+asyncpg://postgres.czhnskoroaxuvczyngrr:<PASS>@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres'
+export ANTHROPIC_API_KEY='sk-ant-...'
+python scripts/seed_production.py                    # 오늘 KST
+python scripts/seed_production.py --date 2026-04-18  # 날짜 명시
+```
+
+래퍼가 내부적으로 [1] pre-flight (Supabase 연결 + 6 테이블 카운트) → [2] `seed_pitchers --harvest` (A-6 로직, 10/10 hit 기대) → [3] `fetch_today_schedule` + `upsert_schedule` (pitcher_id 해소는 step 4 에서 함) → [4] `analyze_and_score_matchups` (Claude Vision + Text 실호출 ~$1) → [5] `publish_matchups` → [6] before/after delta 요약 까지 한 번에 수행. 기반 엔트리포인트 (seed_pitchers, upsert_schedule, analyze_and_score_matchups, publish_matchups) 는 모두 멱등이라 부분 실패 후 재실행 안전 — wrapper end-to-end 자체는 아직 성공 실행 이력 없음, 로컬 1회 성공 후에 "검증됨" 으로 확정. 옵션: `--skip-harvest` (pitchers 이미 시딩), `--skip-crawl` (일정 이미 적재).
+
+성공 시 `matchups.is_published=true` 로우가 N 개 생기고, FE SSR `revalidate: 300` 경계로 최대 5분 안에 카드 렌더. 즉시 무효화는 Vercel Redeploy.
 
 **주의:**
-- 스케줄러 `SCHEDULER_ENABLED=false` 상태라 자동 파이프라인 안 돔. 수동 시드 또는 워커 서비스 분리 필요.
-- Railway BE 에서 KBO 크롤 안 됨 (WAF). 시드는 **반드시 로컬 한국 IP 에서**.
-- `/admin/*` 엔드포인트가 prod 에서도 무인증 노출 중 (후속 과제 참조). 시딩 끝나면 바로 인증 gate 추가 권장.
+- Railway BE 미국 리전이라 KBO 크롤 WAF 차단 → 래퍼 실행은 **반드시 로컬 한국 IP 머신**.
+- 스케줄러 `SCHEDULER_ENABLED=false` 고정. 시딩 후 09:00/10:00/11:00 KST 재시도는 다시 수동 실행 또는 cron 으로 래퍼 호출.
+- `/admin/*` 무인증 노출 중 (후속 과제 2번째). 시딩 끝나면 인증 gate 우선 추가.
+- **Claude Code sandbox 에서는 실행 불가** — egress allowlist (`api.anthropic.com:443`, `www.koreabaseball.com:443`) 때문에 Supabase:5432 로 나가는 TCP 가 timeout 됨. 2026-04-19 실측 확인. 이후 세션에서도 동일 제약, 사용자 로컬 실행 전제.
 
-시드 완료 후에는: Wave 4 Track I-2/I-3 follow-up 클로즈 + 필요 시 워커 서비스 분리 착수.
+시드 완료 후 다음 단계: FE 실매치업 렌더 확인 → Wave 4 Track I-5 DONE 로 이관 → `/admin/*` 인증 gate (후속 과제 2) 착수.
 
 ---
 
@@ -169,7 +173,7 @@ Wave 내 Track 병렬, Wave 간 의존. Critical Path: Track A → Track E → T
 
 ### 후속 과제 (non-blocker)
 
-- [ ] **프로덕션 DB 시딩**: Supabase Postgres 는 alembic 스키마만 있고 pitchers/matchups 데이터 없음. `/api/today` 가 `{matchups:[]}` 라 FE 는 empty-state 렌더. 시드 방안: (1) 로컬에서 `DATABASE_URL=<session-pooler-url> python scripts/seed_pitchers.py --harvest` 로 선수 프로필 수확 후 (2) `scripts/create_sample_matchup.py` 로 샘플 matchup 생성, 또는 (3) 워커 서비스 띄워 스케줄러 돌리기 — 단, Railway 미국 리전은 KBO 크롤이 한국 IP WAF 에 블록됨 (Wave 1 Track C FAIL 참조).
+- [ ] **프로덕션 DB 시딩 — 로컬 실행 대기**: Track I-5 래퍼 (`scripts/seed_production.py`, `ae8cc60`) 로 경로는 확보됨. 사용자 로컬 한국 IP 머신에서 `python scripts/seed_production.py` 한 번 돌리면 pitchers + daily_schedules + face_scores + fortune_scores + matchups 전부 채워지고 `is_published=true` 까지 플립. 실행 + FE 카드 렌더 검증이 끝나면 Track I-5 를 DONE 으로 이관하고 이 bullet 클로즈. sandbox 실행 불가 (egress allowlist, §🔥 참조).
 - [ ] **프로덕션 `/admin/*` 인증 gate**: 현재 dev-only로 열려 있고 prod 에도 그대로 노출됨. `Depends(require_admin_token)` + `APP_ENV==prod` 조건부 적용 필요. Wave 3 Track H 에서 Important 로 플래그된 사항이 prod 에서도 미해결. 특히 `/admin/review-queue/resolve` 가 무인증 상태라 조기 차단 권장.
 - [ ] **Supabase DB 패스워드 로테이션 (옵션)**: 초기 세팅 시 패스워드가 세션 로그에 평문 노출됨. 보안 우선시 Supabase 대시보드에서 리셋 후 Railway `DATABASE_URL` 업데이트 권장.
 - [ ] **Vercel 프로젝트명 rename (옵션)**: 현재 "frontend" 로 생성됨. Vercel 대시보드에서 `facemetrics` 로 rename 가능 (도메인도 `facemetrics-weilkods-projects.vercel.app` 로 변경되니 Railway `FRONTEND_ORIGIN` 동시 업데이트 필요).

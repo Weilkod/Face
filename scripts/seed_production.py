@@ -113,12 +113,11 @@ async def _preflight() -> dict[str, int]:
 
 async def _seed_pitchers(*, harvest: bool) -> None:
     """Step 2: delegate to scripts/seed_pitchers.main()."""
-    import argparse as _ap
-
-    sys.path.insert(0, str(SCRIPT_DIR))
+    if str(SCRIPT_DIR) not in sys.path:
+        sys.path.insert(0, str(SCRIPT_DIR))
     from seed_pitchers import main as seed_main
 
-    ns = _ap.Namespace(harvest=harvest, dry_run=False, pitcher_id=None)
+    ns = argparse.Namespace(harvest=harvest, dry_run=False, pitcher_id=None)
     rc = await seed_main(ns)
     if rc != 0:
         raise RuntimeError(f"seed_pitchers returned {rc}")
@@ -127,14 +126,12 @@ async def _seed_pitchers(*, harvest: bool) -> None:
 async def _crawl_and_write(game_date: date) -> int:
     """Step 3: fetch today's schedule and upsert into daily_schedules.
 
-    Returns the number of schedule entries persisted (insert + update).
+    pitcher_id resolution is intentionally deferred to step 4 — upsert_schedule
+    persists raw Korean names, and analyze_and_score_matchups resolves and logs
+    skip reasons per game. Returns the number of schedule entries persisted.
     """
     from app.db import SessionLocal
-    from app.services.crawler import (
-        fetch_today_schedule,
-        match_pitcher_name,
-        upsert_schedule,
-    )
+    from app.services.crawler import fetch_today_schedule, upsert_schedule
 
     entries = await fetch_today_schedule(game_date)
     if not entries:
@@ -146,29 +143,7 @@ async def _crawl_and_write(game_date: date) -> int:
 
     print(f"  {len(entries)} game(s) returned (source: {entries[0].source})")
 
-    async with SessionLocal() as session:
-        for entry in entries:
-            if entry.home_starter_name and entry.home_team:
-                entry.home_pitcher_id = await match_pitcher_name(
-                    session, entry.home_starter_name, entry.home_team, game_date,
-                )
-            if entry.away_starter_name and entry.away_team:
-                entry.away_pitcher_id = await match_pitcher_name(
-                    session, entry.away_starter_name, entry.away_team, game_date,
-                )
-
-    tbd = [
-        e for e in entries
-        if not e.home_starter_name or not e.away_starter_name
-    ]
-    unmatched = [
-        (e.home_team, e.home_starter_name) for e in entries
-        if e.home_starter_name and e.home_pitcher_id is None
-    ] + [
-        (e.away_team, e.away_starter_name) for e in entries
-        if e.away_starter_name and e.away_pitcher_id is None
-    ]
-
+    tbd = [e for e in entries if not e.home_starter_name or not e.away_starter_name]
     if tbd:
         print(f"  WARN: {len(tbd)} game(s) still have TBD starter(s):")
         for e in tbd:
@@ -178,16 +153,7 @@ async def _crawl_and_write(game_date: date) -> int:
             if not e.away_starter_name:
                 side.append(f"away({e.away_team})")
             print(f"    - {e.away_team} @ {e.home_team}: {', '.join(side)}")
-        print("    per CLAUDE.md §5, retry at 09:00 / 10:00 / 11:00 KST")
-
-    if unmatched:
-        print(f"  WARN: {len(unmatched)} unmatched pitcher name(s):")
-        for team, name in unmatched:
-            print(f"    - [{team}] {name}")
-        print(
-            "    add them to data/pitchers_2026.json and re-run this script "
-            "with --skip-crawl=0 so the harvester picks them up."
-        )
+        print("    per CLAUDE.md §5, retry at 09:00 / 10:00 KST")
 
     async with SessionLocal() as session:
         counts = await upsert_schedule(session, entries)
@@ -218,8 +184,14 @@ async def _publish(game_date: date) -> int:
     return n
 
 
-async def _summary(game_date: date, before: dict[str, int]) -> None:
-    """Step 6: final row counts + delta vs pre-flight."""
+async def _summary(game_date: date, before: dict[str, int]) -> int:
+    """Step 6: final row counts + delta vs pre-flight.
+
+    Returns the number of published matchup rows for game_date — the wrapper's
+    success signal. Counting via SQL instead of publish_matchups' return value
+    keeps re-runs idempotent: on a second run every row is already published,
+    publish_matchups returns 0, but this count stays >= 1.
+    """
     from sqlalchemy import text
 
     from app.db import engine
@@ -246,6 +218,7 @@ async def _summary(game_date: date, before: dict[str, int]) -> None:
         b = before.get(t, 0)
         delta = n - b
         print(f"  {t:<18} {b:>8} {n:>8}  {delta:+8d}")
+    return published_today
 
 
 async def _run(game_date: date, *, skip_harvest: bool, skip_crawl: bool) -> int:
@@ -272,19 +245,25 @@ async def _run(game_date: date, *, skip_harvest: bool, skip_crawl: bool) -> int:
         )
 
     _banner(f"[5/6] publish matchups — flip is_published=true")
-    published = await _publish(game_date)
+    newly_published = await _publish(game_date)
 
     _banner("[6/6] summary")
-    await _summary(game_date, before)
+    published_today = await _summary(game_date, before)
 
-    if published < 1:
+    if published_today < 1:
         print(
-            "\n  WARN: no matchups were published. /api/today will stay empty. "
-            "Check the step 3 (crawl) output above for TBD starters or an "
-            "off-day response from KBO."
+            "\n  WARN: no published matchups for this date. /api/today will "
+            "stay empty. Check the step 3 (crawl) output above for TBD starters "
+            "or an off-day response from KBO."
         )
         return 1
-    print(f"\n  OK — {published} matchup(s) live for {game_date.isoformat()}.")
+    if newly_published == 0:
+        print(
+            f"\n  OK — {published_today} matchup(s) already live for "
+            f"{game_date.isoformat()} (re-run, nothing to flip)."
+        )
+    else:
+        print(f"\n  OK — {published_today} matchup(s) live for {game_date.isoformat()}.")
     return 0
 
 
@@ -350,9 +329,6 @@ def main() -> int:
         )
     except KeyboardInterrupt:
         print("\n  interrupted", file=sys.stderr)
-        return 1
-    except Exception as exc:  # noqa: BLE001
-        logging.exception("seed_production failed: %s", exc)
         return 1
 
 

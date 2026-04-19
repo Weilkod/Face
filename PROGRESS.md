@@ -29,7 +29,7 @@ python scripts/seed_production.py                    # 오늘 KST
 python scripts/seed_production.py --date 2026-04-18  # 날짜 명시
 ```
 
-래퍼가 내부적으로 [1] pre-flight (Supabase 연결 + 6 테이블 카운트) → [2] `seed_pitchers --harvest` (A-6 로직, 10/10 hit 기대) → [3] `fetch_today_schedule` + `upsert_schedule` (pitcher_id 해소는 step 4 에서 함) → [4] `analyze_and_score_matchups` (Claude Vision + Text 실호출 ~$1) → [5] `publish_matchups` → [6] before/after delta 요약 까지 한 번에 수행. 전부 멱등, 실패 시 재실행 안전. 옵션: `--skip-harvest` (pitchers 이미 시딩), `--skip-crawl` (일정 이미 적재).
+래퍼가 내부적으로 [1] pre-flight (Supabase 연결 + 6 테이블 카운트) → [2] `seed_pitchers --harvest` (A-6 로직, 10/10 hit 기대) → [3] `fetch_today_schedule` + `upsert_schedule` (pitcher_id 해소는 step 4 에서 함) → [4] `analyze_and_score_matchups` (Claude Vision + Text 실호출 ~$1) → [5] `publish_matchups` → [6] before/after delta 요약 까지 한 번에 수행. 기반 엔트리포인트 (seed_pitchers, upsert_schedule, analyze_and_score_matchups, publish_matchups) 는 모두 멱등이라 부분 실패 후 재실행 안전 — wrapper end-to-end 자체는 아직 성공 실행 이력 없음, 로컬 1회 성공 후에 "검증됨" 으로 확정. 옵션: `--skip-harvest` (pitchers 이미 시딩), `--skip-crawl` (일정 이미 적재).
 
 성공 시 `matchups.is_published=true` 로우가 N 개 생기고, FE SSR `revalidate: 300` 경계로 최대 5분 안에 카드 렌더. 즉시 무효화는 Vercel Redeploy.
 
